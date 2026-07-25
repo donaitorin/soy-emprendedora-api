@@ -2,7 +2,10 @@
 
 ## Sesión propia
 
-- Password hashing: `passlib[bcrypt]` (`app/core/security.py::hash_password/verify_password`).
+- Password hashing: `argon2-cffi` (`app/core/security.py::hash_password/verify_password`).
+  Se eligió sobre `passlib[bcrypt]` porque `passlib` está sin mantenimiento desde 2020 y
+  su self-test interno de bcrypt (`detect_wrap_bug`) rompe con versiones modernas del
+  paquete `bcrypt` (≥4.1), que ahora validan estrictamente el límite de 72 bytes.
 - JWT propio firmado con `PyJWT` (`create_access_token`/`decode_access_token`), secreto
   en `JWT_SECRET`, expiración en `JWT_EXPIRATION_MINUTES`. El `sub` del payload es el
   `user.id`.

@@ -5,20 +5,24 @@ from typing import Any
 from uuid import UUID
 
 import jwt
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from cryptography.fernet import Fernet
-from passlib.context import CryptContext
 
 from app.core.config import get_settings
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_password_hasher = PasswordHasher()
 
 
 def hash_password(password: str) -> str:
-    return _pwd_context.hash(password)
+    return _password_hasher.hash(password)
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
-    return _pwd_context.verify(plain_password, password_hash)
+    try:
+        return _password_hasher.verify(password_hash, plain_password)
+    except VerifyMismatchError:
+        return False
 
 
 def create_access_token(user_id: UUID) -> str:

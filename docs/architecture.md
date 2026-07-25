@@ -13,7 +13,7 @@ FastAPI.
 - **Alembic** para migraciones (`alembic/versions/`).
 - **PostgreSQL 16** como base de datos.
 - **pydantic-settings** para configuración vía variables de entorno (`app/core/config.py`).
-- **passlib[bcrypt]** para hash de contraseñas, **PyJWT** para el JWT propio,
+- **argon2-cffi** para hash de contraseñas, **PyJWT** para el JWT propio,
   **cryptography (Fernet)** para encriptar en reposo el `access_token` de Meta
   (`app/core/security.py`).
 - **httpx** async para llamar a la Graph API de Meta (`app/services/meta_client.py`).

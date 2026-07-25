@@ -12,7 +12,7 @@ Documentación funcional completa en [`docs/`](docs/):
 ## Stack
 
 FastAPI + Pydantic v2, SQLAlchemy 2.0 (async) + asyncpg, Alembic, PostgreSQL 16,
-pydantic-settings, passlib[bcrypt], PyJWT, httpx (async), cryptography (Fernet),
+pydantic-settings, argon2-cffi, PyJWT, httpx (async), cryptography (Fernet),
 uvicorn. Dependencias gestionadas con [`uv`](https://docs.astral.sh/uv/).
 
 ## Levantar el proyecto con Docker

@@ -40,7 +40,10 @@ class UserAccount(Base):
     account_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
     )
-    role: Mapped[BusinessRole] = mapped_column(Enum(BusinessRole, name="business_role"), nullable=False)
+    role: Mapped[BusinessRole] = mapped_column(
+        Enum(BusinessRole, name="business_role", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="user_accounts")

@@ -29,7 +29,9 @@ class User(Base):
     first_name: Mapped[str] = mapped_column(String, nullable=False)
     last_name: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[PlatformRole] = mapped_column(
-        Enum(PlatformRole, name="platform_role"), nullable=False, default=PlatformRole.USER
+        Enum(PlatformRole, name="platform_role", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=PlatformRole.USER,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

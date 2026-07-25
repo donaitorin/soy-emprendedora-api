@@ -38,7 +38,11 @@ class Entitlement(Base):
     )
     plan: Mapped[str] = mapped_column(String, nullable=False, default="free")
     status: Mapped[EntitlementStatus] = mapped_column(
-        Enum(EntitlementStatus, name="entitlement_status"), nullable=False, default=EntitlementStatus.ACTIVE
+        Enum(
+            EntitlementStatus, name="entitlement_status", values_callable=lambda obj: [e.value for e in obj]
+        ),
+        nullable=False,
+        default=EntitlementStatus.ACTIVE,
     )
     source: Mapped[str] = mapped_column(String, nullable=False, default="manual")
     external_ref: Mapped[str | None] = mapped_column(String, nullable=True)
