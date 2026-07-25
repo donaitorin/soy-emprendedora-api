@@ -9,6 +9,11 @@ Documentación funcional completa en [`docs/`](docs/):
 [auth](docs/auth.md), [integración con Meta](docs/meta-integration.md),
 [referencia de API](docs/api-reference.md) y [puntos de extensión](docs/extension-points.md).
 
+Para integrar un frontend contra esta API (o pasarle contexto a un agente que lo
+construya), usar [docs/frontend-integration.md](docs/frontend-integration.md) —
+documento autocontenido con auth, modelo de roles y el contrato completo de cada
+endpoint.
+
 ## Stack
 
 FastAPI + Pydantic v2, SQLAlchemy 2.0 (async) + asyncpg, Alembic, PostgreSQL 16,
