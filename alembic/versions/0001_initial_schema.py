@@ -23,11 +23,9 @@ entitlement_status = postgresql.ENUM(
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    platform_role.create(bind, checkfirst=True)
-    business_role.create(bind, checkfirst=True)
-    entitlement_status.create(bind, checkfirst=True)
-
+    # Don't pre-create the ENUM types here: op.create_table() below already creates
+    # each one automatically (via the column's postgresql.ENUM type), since it's the
+    # first time each type is used. Doing both raises DuplicateObjectError.
     op.create_table(
         "users",
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
@@ -110,14 +108,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # drop_table() drops each column's ENUM type automatically once the last table
+    # using it is gone — no manual .drop() needed (mirrors the upgrade() note above).
     op.drop_table("meta_connections")
     op.drop_table("entitlements")
     op.drop_table("user_accounts")
     op.drop_table("accounts")
     op.drop_index("ix_users_email", table_name="users")
     op.drop_table("users")
-
-    bind = op.get_bind()
-    entitlement_status.drop(bind, checkfirst=True)
-    business_role.drop(bind, checkfirst=True)
-    platform_role.drop(bind, checkfirst=True)
