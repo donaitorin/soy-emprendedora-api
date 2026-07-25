@@ -1,93 +1,112 @@
-# soy-emprendedora-api
+# Soy Emprendedora API
 
+Backend en FastAPI para un dashboard de datos de Meta/Instagram Business. Sirve a un
+frontend externo (no incluido en este repo): autenticación propia, gestión de negocios
+y colaboradores, conexión OAuth server-side con Meta, y un endpoint de insights.
 
+Documentación funcional completa en [`docs/`](docs/):
+[arquitectura](docs/architecture.md), [modelo de datos](docs/data-model.md),
+[auth](docs/auth.md), [integración con Meta](docs/meta-integration.md),
+[referencia de API](docs/api-reference.md) y [puntos de extensión](docs/extension-points.md).
 
-## Getting started
+## Stack
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+FastAPI + Pydantic v2, SQLAlchemy 2.0 (async) + asyncpg, Alembic, PostgreSQL 16,
+pydantic-settings, passlib[bcrypt], PyJWT, httpx (async), cryptography (Fernet),
+uvicorn. Dependencias gestionadas con [`uv`](https://docs.astral.sh/uv/).
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Levantar el proyecto con Docker
 
-## Add your files
+1. Copiá `.env.example` a `.env` y completá los valores (ver sección de variables abajo).
+2. `docker compose up --build`
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+Esto levanta:
+- `db`: Postgres 16 con un volumen persistente y healthcheck.
+- `api`: build de la imagen, corre las migraciones de Alembic automáticamente
+  (`docker-entrypoint.sh` ejecuta `alembic upgrade head` antes de levantar uvicorn)
+  y expone la API en `http://localhost:8000`.
 
+La documentación interactiva queda en `http://localhost:8000/docs`.
+
+## Migraciones (manual, sin Docker)
+
+Con `uv` instalado y un Postgres corriendo localmente:
+
+```bash
+uv sync
+export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/soy_emprendedora
+uv run alembic upgrade head
+
+# para generar una nueva migración tras cambiar modelos:
+uv run alembic revision --autogenerate -m "descripcion"
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/donai.torin-group/soy-emprendedora-api.git
-git branch -M main
-git push -uf origin main
+
+## Variables de entorno
+
+Ver `.env.example`. Resumen:
+
+| Variable | Descripción |
+|---|---|
+| `DATABASE_URL` | Cadena de conexión async a Postgres (`postgresql+asyncpg://...`) |
+| `JWT_SECRET` | Secreto para firmar el JWT propio de la API |
+| `JWT_EXPIRATION_MINUTES` | Minutos de validez del JWT |
+| `FERNET_KEY` | Clave Fernet para encriptar el `access_token` de Meta en reposo |
+| `META_APP_ID` / `META_APP_SECRET` | Credenciales de la app en Meta for Developers |
+| `META_REDIRECT_URI` | Debe coincidir exactamente con la configurada en Meta for Developers |
+| `META_OAUTH_SCOPES` | Scopes solicitados en el flujo OAuth |
+| `FRONTEND_URL` | Origen del frontend, usado para configurar CORS |
+
+Generar `FERNET_KEY`:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-## Integrate with your tools
+## Autenticación (cómo la consume el frontend)
 
-* [Set up project integrations](https://gitlab.com/donai.torin-group/soy-emprendedora-api/-/settings/integrations)
+El JWT propio viaja como **Bearer token** en el header `Authorization: Bearer <token>`
+(no como cookie httpOnly) — así se evita configurar cookies cross-origin entre el
+frontend y esta API. El `access_token` de Meta **nunca** se expone en ninguna
+respuesta de la API; se guarda encriptado con Fernet.
 
-## Collaborate with your team
+Flujo básico:
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```bash
+# Registro (crea user + account propio + entitlement free/active)
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ana@example.com","password":"supersecreta","first_name":"Ana","last_name":"Pérez"}'
 
-## Test and Deploy
+# Login
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ana@example.com","password":"supersecreta"}'
 
-Use the built-in continuous integration in GitLab.
+# Usar el token devuelto
+curl http://localhost:8000/auth/me -H "Authorization: Bearer <access_token>"
+```
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+## Configurar la app de Meta for Developers (para probar el OAuth en local)
 
-***
+1. Creá una app en [developers.facebook.com](https://developers.facebook.com/apps/) de
+   tipo "Business".
+2. Agregá el producto **Facebook Login** y, en su configuración, agregá como
+   "Valid OAuth Redirect URI" exactamente el valor de `META_REDIRECT_URI`
+   (por ejemplo `http://localhost:8000/meta/callback` — Meta exige HTTPS salvo para
+   `localhost`).
+3. Copiá el **App ID** y **App Secret** a `META_APP_ID` / `META_APP_SECRET` en `.env`.
+4. Agregá como usuarios de prueba (Roles → Test Users, o tu propio usuario como Admin/
+   Developer de la app) para poder autorizar el flujo mientras la app está en modo
+   desarrollo.
+5. El negocio de prueba debe tener una Página de Facebook con una cuenta de Instagram
+   Business/Creator vinculada para que `/meta/callback` encuentre `instagram_business_account`.
+6. Flujo: `GET /meta/connect?account_id=<uuid>` (requiere estar autenticado y tener
+   acceso a ese `account_id`) redirige a Facebook. Tras autorizar, Facebook redirige a
+   `META_REDIRECT_URI` con `code` y `state`; el backend intercambia el `code` por el
+   token del lado del servidor y nunca lo expone al frontend.
 
-# Editing this README
+## No implementado todavía (a propósito)
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Ver [docs/extension-points.md](docs/extension-points.md) para el detalle y los `TODO`
+exactos en el código: envío real de emails de invitación, integración con pasarela de
+pagos, y validación estricta de entitlements (hoy el acceso es libre).
