@@ -12,7 +12,8 @@ Documentación funcional completa en [`docs/`](docs/):
 Para integrar un frontend contra esta API (o pasarle contexto a un agente que lo
 construya), usar [docs/frontend-integration.md](docs/frontend-integration.md) —
 documento autocontenido con auth, modelo de roles y el contrato completo de cada
-endpoint.
+endpoint. Para arrancar el proyecto de Next.js del frontend en sí, usar
+[docs/prompt-frontend-nextjs.md](docs/prompt-frontend-nextjs.md).
 
 ## Stack
 

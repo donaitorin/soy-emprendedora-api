@@ -28,7 +28,7 @@ apropiados (401/403/404/409/502). Documentación interactiva viva: `/docs` (Swag
 
 | Método | Path | Auth | Descripción |
 |---|---|---|---|
-| GET | `/meta/connect?account_id=` | miembro del negocio o admin | Redirige a OAuth de Facebook. |
+| GET | `/meta/connect?account_id=` | miembro del negocio o admin | Devuelve `{"url": "..."}` con la URL de OAuth de Facebook (JSON, no redirect — ver [meta-integration.md](meta-integration.md)). |
 | GET | `/meta/callback?code=&state=` | — (validado por `state` firmado) | Intercambia code por token, lista páginas, persiste si hay una sola. |
 | POST | `/meta/select-page` | miembro del negocio o admin (validado del body) | Fija la página elegida cuando el callback devolvió varias opciones. |
 | GET | `/meta/status?account_id=` | miembro del negocio o admin | Estado de conexión, sin exponer el token. |

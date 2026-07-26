@@ -2,7 +2,7 @@ import uuid
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,10 @@ from app.schemas.meta_connection import (
 )
 from app.services import meta_client
 
+
+class MetaConnectUrl(BaseModel):
+    url: str
+
 router = APIRouter(prefix="/meta", tags=["meta"])
 
 # In-memory cache of page options per account, keyed by account_id, populated by the
@@ -27,13 +31,19 @@ router = APIRouter(prefix="/meta", tags=["meta"])
 _pending_page_selection: dict[uuid.UUID, list[dict]] = {}
 
 
-@router.get("/connect")
+@router.get("/connect", response_model=MetaConnectUrl)
 async def connect(
     account_id: uuid.UUID = Query(...),
     _=Depends(require_business_access),
-) -> RedirectResponse:
+) -> MetaConnectUrl:
+    """Returns the Facebook OAuth URL as JSON instead of redirecting directly.
+
+    This endpoint requires a Bearer token, which a plain top-level browser navigation
+    can't send — so the frontend must call it via fetch (with the Authorization
+    header) and then navigate the browser itself: `window.location.href = data.url`.
+    """
     state = create_meta_oauth_state(account_id)
-    return RedirectResponse(meta_client.build_oauth_url(state))
+    return MetaConnectUrl(url=meta_client.build_oauth_url(state))
 
 
 @router.get("/callback", response_model=MetaCallbackResult)

@@ -161,13 +161,18 @@ Errores: `404` si no es miembro, `409` si `user_id` es el único `owner` del neg
 
 ### Meta / Instagram (conexión OAuth)
 
-Flujo pensado para navegación de página completa (redirects), no fetch/XHR, salvo
-`select-page` y `status`.
-
 #### `GET /meta/connect?account_id=<uuid>`
-Requiere Bearer + ser miembro del negocio o admin. **No devuelve JSON**: responde un
-`302 redirect` a la pantalla de autorización de Facebook. El frontend debe navegar el
-browser a esta URL directamente (`window.location.href = ...`), no hacer un `fetch`.
+Requiere Bearer + ser miembro del negocio o admin.
+
+Response `200`:
+```json
+{ "url": "https://www.facebook.com/v21.0/dialog/oauth?client_id=...&state=...&scope=..." }
+```
+Devuelve la URL como JSON (no un redirect 302 directo) **a propósito**: esta ruta exige
+Bearer token, que una navegación de página completa del browser no puede enviar. El
+frontend debe:
+1. Llamar este endpoint con `fetch` (con el header `Authorization`).
+2. Con la respuesta, navegar el browser él mismo: `window.location.href = data.url`.
 
 #### `GET /meta/callback?code=&state=`
 Facebook redirige acá directamente (no lo llama el frontend). Sin auth propia (se valida

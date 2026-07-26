@@ -9,8 +9,12 @@ frontend.
 
 1. **`GET /meta/connect?account_id=<uuid>`** (requiere `require_business_access`) —
    genera un `state` firmado (JWT corto, 10 min, `app/core/security.py::create_meta_oauth_state`)
-   que codifica el `account_id`, y redirige (302) a la URL de OAuth de Facebook
-   (`meta_client.build_oauth_url`) con los scopes de `META_OAUTH_SCOPES`.
+   que codifica el `account_id`, y devuelve `{"url": "..."}` con la URL de OAuth de
+   Facebook (`meta_client.build_oauth_url`) con los scopes de `META_OAUTH_SCOPES`.
+   Devuelve JSON en vez de un redirect 302 directo **a propósito**: esta ruta exige
+   Bearer token, que una navegación de página completa del browser no puede enviar —
+   el frontend debe llamarla vía `fetch` (con el header `Authorization`) y recién
+   ahí navegar él mismo (`window.location.href = data.url`).
 
 2. **`GET /meta/callback?code=&state=`** — Facebook redirige acá tras la autorización.
    - Se decodifica y valida el `state` para recuperar el `account_id`
