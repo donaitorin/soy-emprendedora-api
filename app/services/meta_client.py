@@ -105,3 +105,37 @@ async def get_ig_insights(ig_business_id: str, page_access_token: str) -> dict[s
         "impressions": metrics.get("impressions"),
         "reach": metrics.get("reach"),
     }
+
+
+async def get_profile_picture_url(
+    ig_business_id: str | None, fb_page_id: str | None, access_token: str
+) -> str | None:
+    """Best-effort profile picture lookup — decorative data, never raises.
+
+    Prefers the IG Business account's picture; falls back to the Facebook Page's
+    picture if there's no linked IG account. Returns None on any failure (expired
+    token, rate limit, missing field, etc.) instead of propagating an error.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            if ig_business_id:
+                response = await client.get(
+                    f"{_graph_base_url()}/{ig_business_id}",
+                    params={"access_token": access_token, "fields": "profile_picture_url"},
+                )
+                if response.status_code == 200:
+                    return response.json().get("profile_picture_url")
+                return None
+
+            if fb_page_id:
+                response = await client.get(
+                    f"{_graph_base_url()}/{fb_page_id}/picture",
+                    params={"access_token": access_token, "redirect": "false"},
+                )
+                if response.status_code == 200:
+                    return response.json().get("data", {}).get("url")
+                return None
+    except httpx.HTTPError:
+        return None
+
+    return None

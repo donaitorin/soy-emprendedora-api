@@ -7,7 +7,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import ensure_business_access, get_current_user, require_business_access
-from app.core.security import create_meta_oauth_state, decode_meta_oauth_state, encrypt_secret
+from app.core.security import (
+    create_meta_oauth_state,
+    decode_meta_oauth_state,
+    decrypt_secret,
+    encrypt_secret,
+)
 from app.db.session import get_db
 from app.models.meta_connection import MetaConnection
 from app.models.user import User
@@ -153,7 +158,16 @@ async def status_(
     connection = result.scalars().first()
     if connection is None:
         return MetaConnectionStatus(connected=False)
-    return _to_status(connection)
+
+    status_response = _to_status(connection)
+    try:
+        access_token = decrypt_secret(connection.access_token_encrypted)
+        status_response.profile_picture_url = await meta_client.get_profile_picture_url(
+            connection.ig_business_id, connection.fb_page_id, access_token
+        )
+    except Exception:  # noqa: BLE001 — decorative field, must never break /meta/status
+        status_response.profile_picture_url = None
+    return status_response
 
 
 @router.delete("/disconnect", status_code=status.HTTP_204_NO_CONTENT)

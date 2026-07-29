@@ -215,12 +215,18 @@ Requiere Bearer + ser miembro del negocio o admin. Nunca expone tokens.
 
 Response `200` (sin conexión):
 ```json
-{ "connected": false, "fb_page_id": null, "ig_business_id": null, "page_name": null, "ig_username": null, "token_expires_at": null, "is_primary": null }
+{ "connected": false, "fb_page_id": null, "ig_business_id": null, "page_name": null, "ig_username": null, "profile_picture_url": null, "token_expires_at": null, "is_primary": null }
 ```
 Response `200` (con conexión):
 ```json
-{ "connected": true, "fb_page_id": "123", "ig_business_id": "456", "page_name": "Mi Negocio", "ig_username": "minegocio", "token_expires_at": null, "is_primary": true }
+{ "connected": true, "fb_page_id": "123", "ig_business_id": "456", "page_name": "Mi Negocio", "ig_username": "minegocio", "profile_picture_url": "https://scontent.xx.fbcdn.net/...", "token_expires_at": null, "is_primary": true }
 ```
+`profile_picture_url` es la foto de perfil de la cuenta de Instagram conectada (o de la
+Página de Facebook si el negocio no tiene IG vinculado). Puede venir `null` aunque
+`connected: true` — no solo cuando no hay conexión, sino también si Meta no pudo
+responder la imagen en ese momento (token vencido, rate limit, etc.); usá siempre un
+fallback visual (inicial del nombre) para ese caso, no asumas que `connected: true`
+implica que la imagen está disponible.
 
 #### `DELETE /meta/disconnect?account_id=<uuid>`
 Requiere Bearer + ser miembro del negocio o admin. Response `204` sin contenido.

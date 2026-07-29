@@ -14,6 +14,7 @@ class MetaConnectionStatus(BaseModel):
     ig_business_id: str | None = None
     page_name: str | None = None
     ig_username: str | None = None
+    profile_picture_url: str | None = None
     token_expires_at: datetime | None = None
     is_primary: bool | None = None
 
