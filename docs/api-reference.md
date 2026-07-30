@@ -23,6 +23,10 @@ apropiados (401/403/404/409/502). Documentación interactiva viva: `/docs` (Swag
 | GET | `/accounts/{account_id}/members` | miembro del negocio o admin | Lista miembros y roles. |
 | POST | `/accounts/{account_id}/members` | owner o admin | Agrega colaborador por email. Si el email no existe, crea el user con password temporal (ver [extension-points.md](extension-points.md)). 409 si ya es miembro. |
 | DELETE | `/accounts/{account_id}/members/{user_id}` | owner o admin | Quita colaborador. 409 si es el único owner. |
+| POST | `/accounts/{account_id}/incomes` | miembro del negocio o admin | Registra un ingreso (`amount`, `occurred_on`, `source`, `payment_method`). |
+| GET | `/accounts/{account_id}/incomes?from=&to=` | miembro del negocio o admin | Lista ingresos, más reciente primero por `occurred_on`, filtro opcional por rango de fechas. |
+| POST | `/accounts/{account_id}/expenses` | miembro del negocio o admin | Registra un gasto (`amount`, `occurred_on`, `category`). |
+| GET | `/accounts/{account_id}/expenses?from=&to=` | miembro del negocio o admin | Lista gastos, más reciente primero por `occurred_on`, filtro opcional por rango de fechas. |
 
 ## Meta (`app/api/routes/meta.py`)
 

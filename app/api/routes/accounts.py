@@ -1,6 +1,7 @@
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,9 +9,11 @@ from app.api.deps import get_current_user, require_business_access, require_busi
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.account import Account
+from app.models.money_movement import MoneyMovement, MovementType
 from app.models.user import User
 from app.models.user_account import BusinessRole, UserAccount
 from app.schemas.account import AccountRead, AccountUpdate, AccountWithRole
+from app.schemas.money_movement import ExpenseCreate, ExpenseRead, IncomeCreate, IncomeRead
 from app.schemas.user_account import MemberCreate, MemberRead
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -161,3 +164,85 @@ async def remove_member(
 
     await db.delete(membership)
     await db.commit()
+
+
+async def _list_movements(
+    db: AsyncSession, account_id: uuid.UUID, movement_type: MovementType, from_: date | None, to: date | None
+) -> list[MoneyMovement]:
+    stmt = select(MoneyMovement).where(
+        MoneyMovement.account_id == account_id, MoneyMovement.type == movement_type
+    )
+    if from_ is not None:
+        stmt = stmt.where(MoneyMovement.occurred_on >= from_)
+    if to is not None:
+        stmt = stmt.where(MoneyMovement.occurred_on <= to)
+    stmt = stmt.order_by(MoneyMovement.occurred_on.desc(), MoneyMovement.created_at.desc())
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+@router.post("/{account_id}/incomes", response_model=IncomeRead, status_code=status.HTTP_201_CREATED)
+async def create_income(
+    account_id: uuid.UUID,
+    payload: IncomeCreate,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> MoneyMovement:
+    await _get_account_or_404(db, account_id)
+
+    movement = MoneyMovement(
+        account_id=account_id,
+        type=MovementType.INCOME,
+        amount=payload.amount,
+        occurred_on=payload.occurred_on,
+        source=payload.source,
+        payment_method=payload.payment_method,
+    )
+    db.add(movement)
+    await db.commit()
+    await db.refresh(movement)
+    return movement
+
+
+@router.get("/{account_id}/incomes", response_model=list[IncomeRead])
+async def list_incomes(
+    account_id: uuid.UUID,
+    from_: date | None = Query(None, alias="from"),
+    to: date | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> list[MoneyMovement]:
+    return await _list_movements(db, account_id, MovementType.INCOME, from_, to)
+
+
+@router.post("/{account_id}/expenses", response_model=ExpenseRead, status_code=status.HTTP_201_CREATED)
+async def create_expense(
+    account_id: uuid.UUID,
+    payload: ExpenseCreate,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> MoneyMovement:
+    await _get_account_or_404(db, account_id)
+
+    movement = MoneyMovement(
+        account_id=account_id,
+        type=MovementType.EXPENSE,
+        amount=payload.amount,
+        occurred_on=payload.occurred_on,
+        category=payload.category,
+    )
+    db.add(movement)
+    await db.commit()
+    await db.refresh(movement)
+    return movement
+
+
+@router.get("/{account_id}/expenses", response_model=list[ExpenseRead])
+async def list_expenses(
+    account_id: uuid.UUID,
+    from_: date | None = Query(None, alias="from"),
+    to: date | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> list[MoneyMovement]:
+    return await _list_movements(db, account_id, MovementType.EXPENSE, from_, to)

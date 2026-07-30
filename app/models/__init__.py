@@ -3,7 +3,8 @@
 from app.models.account import Account
 from app.models.entitlement import Entitlement
 from app.models.meta_connection import MetaConnection
+from app.models.money_movement import MoneyMovement
 from app.models.user import User
 from app.models.user_account import UserAccount
 
-__all__ = ["Account", "Entitlement", "MetaConnection", "User", "UserAccount"]
+__all__ = ["Account", "Entitlement", "MetaConnection", "MoneyMovement", "User", "UserAccount"]

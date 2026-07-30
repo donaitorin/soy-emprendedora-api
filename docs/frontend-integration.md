@@ -245,6 +245,70 @@ Errores: `404` si el negocio no tiene conexión Meta activa (mostrar CTA para co
 Instagram); `502` si la Graph API de Meta falla (mostrar estado de error transitorio,
 reintentable).
 
+### Dinero (ingresos y gastos)
+
+Requiere Bearer + ser miembro del negocio (`owner` o `collaborator`) o admin — a
+diferencia de editar el negocio o gestionar miembros, cargar movimientos de dinero no
+requiere ser `owner`.
+
+Internamente ambos recursos viven en una sola tabla con un campo `type` interno
+(no expuesto en las respuestas), por eso comparten formato de error y paginación, pero
+cada uno tiene su propio shape de request/response.
+
+#### `POST /accounts/{account_id}/incomes`
+Registra un ingreso.
+
+Request:
+```json
+{ "amount": 15000.50, "occurred_on": "2026-07-15", "source": "mentoria", "payment_method": "transferencia" }
+```
+- `amount`: número > 0.
+- `occurred_on`: fecha (`YYYY-MM-DD`) en que ocurrió el ingreso — no es necesariamente hoy (carga tardía).
+- `source`: uno de `"mentoria" | "comunidad" | "claridad" | "producto" | "otro"`.
+- `payment_method`: uno de `"transferencia" | "stripe" | "mercadopago" | "paypal" | "efectivo"`.
+
+Response `201`:
+```json
+{ "id": "uuid", "account_id": "uuid", "amount": 15000.50, "occurred_on": "2026-07-15", "source": "mentoria", "payment_method": "transferencia", "created_at": "2026-07-29T10:00:00Z" }
+```
+Errores: `404` si el negocio no existe, `422` si falta un campo o el valor de un enum no es válido.
+
+#### `GET /accounts/{account_id}/incomes?from=&to=`
+Lista de ingresos del negocio, más reciente primero por `occurred_on` (no por
+`created_at`). `from`/`to` son fechas opcionales (`YYYY-MM-DD`) que filtran por
+`occurred_on`, inclusive. Sin agregados todavía (totales, breakdown por fuente) — esto
+es la lista cruda, para calcular eso en el frontend por ahora.
+
+Response `200`: `list` del mismo shape que la respuesta de `POST /incomes`.
+
+#### `POST /accounts/{account_id}/expenses`
+Registra un gasto.
+
+Request:
+```json
+{ "amount": 4000, "occurred_on": "2026-07-10", "category": "herramientas" }
+```
+- `amount`: número > 0.
+- `occurred_on`: fecha (`YYYY-MM-DD`) en que ocurrió el gasto.
+- `category`: uno de `"herramientas" | "publicidad" | "educacion" | "servicios" | "otro"`.
+
+Response `201`:
+```json
+{ "id": "uuid", "account_id": "uuid", "amount": 4000, "occurred_on": "2026-07-10", "category": "herramientas", "created_at": "2026-07-29T10:00:00Z" }
+```
+Errores: igual que `POST /incomes`.
+
+#### `GET /accounts/{account_id}/expenses?from=&to=`
+Igual que `GET /incomes`, pero para gastos: más reciente primero por `occurred_on`,
+mismos filtros `from`/`to` opcionales.
+
+Response `200`: `list` del mismo shape que la respuesta de `POST /expenses`.
+
+**Fuera de alcance todavía**: edición/borrado de movimientos ya cargados, endpoints de
+agregados (total del día/mes, breakdown por fuente o categoría, histórico), y la "meta
+del mes" (objetivo mensual configurable) — todo eso queda para un pedido posterior sobre
+este mismo modelo.
+
 ### Admin (solo `role: "admin"` de plataforma — ocultar toda esta sección si `role !== "admin"`)
 
 #### `GET /admin/users?role=&is_active=`
@@ -302,6 +366,9 @@ frontend (splash screen, banner de "backend caído").
 - Rol de plataforma (`UserRead.role`): `"admin"`, `"user"`
 - Rol de negocio (`MemberRead.role`, `AccountWithRole.my_role`): `"owner"`, `"collaborator"`
 - Status de entitlement (`EntitlementRead.status`): `"active"`, `"trialing"`, `"past_due"`, `"canceled"`, `"revoked"`
+- Fuente de ingreso (`IncomeRead.source`): `"mentoria"`, `"comunidad"`, `"claridad"`, `"producto"`, `"otro"`
+- Método de pago (`IncomeRead.payment_method`): `"transferencia"`, `"stripe"`, `"mercadopago"`, `"paypal"`, `"efectivo"`
+- Categoría de gasto (`ExpenseRead.category`): `"herramientas"`, `"publicidad"`, `"educacion"`, `"servicios"`, `"otro"`
 
 ## Limitaciones conocidas a tener en cuenta en el diseño del frontend
 

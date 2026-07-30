@@ -9,6 +9,7 @@ erDiagram
     ACCOUNTS ||--o{ USER_ACCOUNTS : "tiene"
     ACCOUNTS ||--o{ ENTITLEMENTS : "tiene (histórico)"
     ACCOUNTS ||--o{ META_CONNECTIONS : "tiene (histórico)"
+    ACCOUNTS ||--o{ MONEY_MOVEMENTS : "tiene"
 
     USERS {
         uuid id PK
@@ -58,6 +59,18 @@ erDiagram
         timestamp created_at
         timestamp updated_at
     }
+    MONEY_MOVEMENTS {
+        uuid id PK
+        uuid account_id FK
+        enum type "income|expense"
+        numeric amount
+        date occurred_on
+        enum source "mentoria|comunidad|claridad|producto|otro (solo income)"
+        enum payment_method "transferencia|stripe|mercadopago|paypal|efectivo (solo income)"
+        enum category "herramientas|publicidad|educacion|servicios|otro (solo expense)"
+        timestamp created_at
+        timestamp updated_at
+    }
 ```
 
 ## Tablas
@@ -99,3 +112,12 @@ al conectar una nueva). `access_token_encrypted` guarda el token de Meta cifrado
 Fernet — **nunca** se serializa en una respuesta de la API (ver
 `app/schemas/meta_connection.py::MetaConnectionStatus`, que ni siquiera tiene ese
 campo).
+
+### `money_movements`
+Ingresos y gastos de un `account`, en **una sola tabla** con un discriminador `type`
+(`income`/`expense`) en vez de dos tablas separadas — así un rango de fechas o un total
+se puede calcular con una sola query en vez de un `UNION`. `source`/`payment_method`
+solo aplican a `type=income`; `category` solo a `type=expense`; esto se enforce a nivel
+de API (dos schemas Pydantic de request distintos, uno por endpoint), no con un CHECK
+constraint en la base. `amount` usa `NUMERIC(12,2)`, nunca float, para evitar errores de
+redondeo en montos de dinero.
