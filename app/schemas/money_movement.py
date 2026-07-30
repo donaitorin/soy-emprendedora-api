@@ -15,11 +15,16 @@ class IncomeCreate(BaseModel):
 
 
 class IncomeRead(BaseModel):
+    """`amount` is float here (not Decimal) on purpose: Pydantic v2 serializes Decimal
+    as a JSON string to avoid precision loss, but that breaks naive `total += amount`
+    arithmetic on the frontend. Storage keeps NUMERIC/Decimal (see MoneyMovement) —
+    this is only about the shape of the HTTP response."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     account_id: uuid.UUID
-    amount: Decimal
+    amount: float
     occurred_on: date
     source: IncomeSource
     payment_method: PaymentMethod
@@ -33,11 +38,13 @@ class ExpenseCreate(BaseModel):
 
 
 class ExpenseRead(BaseModel):
+    """See IncomeRead's docstring for why `amount` is float here, not Decimal."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     account_id: uuid.UUID
-    amount: Decimal
+    amount: float
     occurred_on: date
     category: ExpenseCategory
     created_at: datetime
