@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.money_movement import ExpenseCategory, IncomeSource, PaymentMethod
+from app.models.money_movement import ExpenseCategory, IncomeSource, MovementType, PaymentMethod
 
 
 class IncomeCreate(BaseModel):
@@ -48,3 +48,31 @@ class ExpenseRead(BaseModel):
     occurred_on: date
     category: ExpenseCategory
     created_at: datetime
+
+
+class MovementRead(BaseModel):
+    """Combined income/expense view for the mixed, paginated movements table.
+
+    Always exposes every field (income-only and expense-only alike), null when not
+    applicable to this row's `type` — same pattern as MetaConnectionStatus, which
+    always exposes every connection field even when there's no active connection."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    account_id: uuid.UUID
+    type: MovementType
+    amount: float
+    occurred_on: date
+    created_at: datetime
+    source: IncomeSource | None
+    payment_method: PaymentMethod | None
+    category: ExpenseCategory | None
+
+
+class MovementPage(BaseModel):
+    items: list[MovementRead]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int

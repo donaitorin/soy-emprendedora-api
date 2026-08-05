@@ -80,5 +80,8 @@ class MoneyMovement(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    # Soft delete: a non-null deleted_at means this row must be excluded from every
+    # listing/aggregate. Never hard-deleted — see app/api/routes/accounts.py::delete_movement.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     account: Mapped["Account"] = relationship(back_populates="money_movements")

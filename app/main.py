@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import accounts, admin, auth, dashboard, meta
+from app.api.routes import accounts, admin, auth, dashboard, leads, meta
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -18,6 +18,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(accounts.router)
+app.include_router(leads.router)
 app.include_router(meta.router)
 app.include_router(admin.router)
 app.include_router(dashboard.router)

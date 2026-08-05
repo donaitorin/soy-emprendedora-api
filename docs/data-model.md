@@ -10,6 +10,7 @@ erDiagram
     ACCOUNTS ||--o{ ENTITLEMENTS : "tiene (histórico)"
     ACCOUNTS ||--o{ META_CONNECTIONS : "tiene (histórico)"
     ACCOUNTS ||--o{ MONEY_MOVEMENTS : "tiene"
+    ACCOUNTS ||--o{ LEADS : "tiene"
 
     USERS {
         uuid id PK
@@ -70,6 +71,21 @@ erDiagram
         enum category "herramientas|publicidad|educacion|servicios|otro (solo expense)"
         timestamp created_at
         timestamp updated_at
+        timestamp deleted_at "soft delete, NULL = activo"
+    }
+    LEADS {
+        uuid id PK
+        uuid account_id FK
+        string name
+        enum channel "instagram|whatsapp|referido|web|otro"
+        enum stage "nuevo|conversacion|propuesta|agendada|convertida"
+        timestamp stage_changed_at
+        timestamp converted_at "NULL salvo stage=convertida"
+        bool archived
+        enum archive_reason "converted|not_converted, NULL si archived=false"
+        timestamp archived_at
+        timestamp created_at
+        timestamp deleted_at "soft delete, NULL = activo"
     }
 ```
 
@@ -120,4 +136,18 @@ se puede calcular con una sola query en vez de un `UNION`. `source`/`payment_met
 solo aplican a `type=income`; `category` solo a `type=expense`; esto se enforce a nivel
 de API (dos schemas Pydantic de request distintos, uno por endpoint), no con un CHECK
 constraint en la base. `amount` usa `NUMERIC(12,2)`, nunca float, para evitar errores de
-redondeo en montos de dinero.
+redondeo en montos de dinero (aunque la API sí devuelve `float` en el JSON de
+respuesta — ver `app/schemas/money_movement.py`, es solo una decisión de
+serialización). Borrado vía `deleted_at` (soft delete) — nunca se hace `DELETE` real;
+todas las queries de listado filtran `deleted_at IS NULL` (ver
+`app/api/routes/accounts.py::delete_movement`).
+
+### `leads`
+Un lead del tablero kanban, ligado a un `account`. Dos estados independientes que no hay
+que confundir: `archived` (sale del tablero pero sigue contando para `/leads/stats` y
+sigue en la tabla paginada) y `deleted_at` (soft delete real, excluido de todo — tablero,
+tabla y métricas). `stage_changed_at` se actualiza en cada cambio de `stage` (drag and
+drop, `app/api/routes/leads.py::update_lead_stage`); `converted_at` se completa la
+primera vez que `stage` pasa a `convertida` y **se limpia** si el lead se mueve a
+cualquier otra etapa (decisión de producto explícita — si vuelve a `convertida` más
+tarde, se completa de nuevo con la fecha de ese momento, no la original).

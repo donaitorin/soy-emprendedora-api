@@ -1,8 +1,9 @@
+import math
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_business_access, require_business_owner
@@ -13,7 +14,14 @@ from app.models.money_movement import MoneyMovement, MovementType
 from app.models.user import User
 from app.models.user_account import BusinessRole, UserAccount
 from app.schemas.account import AccountRead, AccountUpdate, AccountWithRole
-from app.schemas.money_movement import ExpenseCreate, ExpenseRead, IncomeCreate, IncomeRead
+from app.schemas.money_movement import (
+    ExpenseCreate,
+    ExpenseRead,
+    IncomeCreate,
+    IncomeRead,
+    MovementPage,
+    MovementRead,
+)
 from app.schemas.user_account import MemberCreate, MemberRead
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -170,7 +178,9 @@ async def _list_movements(
     db: AsyncSession, account_id: uuid.UUID, movement_type: MovementType, from_: date | None, to: date | None
 ) -> list[MoneyMovement]:
     stmt = select(MoneyMovement).where(
-        MoneyMovement.account_id == account_id, MoneyMovement.type == movement_type
+        MoneyMovement.account_id == account_id,
+        MoneyMovement.type == movement_type,
+        MoneyMovement.deleted_at.is_(None),
     )
     if from_ is not None:
         stmt = stmt.where(MoneyMovement.occurred_on >= from_)
@@ -246,3 +256,72 @@ async def list_expenses(
     _=Depends(require_business_access),
 ) -> list[MoneyMovement]:
     return await _list_movements(db, account_id, MovementType.EXPENSE, from_, to)
+
+
+@router.get("/{account_id}/movements", response_model=MovementPage)
+async def list_movements(
+    account_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    from_: date | None = Query(None, alias="from"),
+    to: date | None = Query(None),
+    type_: MovementType | None = Query(None, alias="type"),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> MovementPage:
+    """Combined, paginated view of incomes + expenses for the /dashboard/money table.
+
+    Complements (doesn't replace) /incomes and /expenses, which stay unpaginated for
+    the existing summary cards/charts.
+    """
+    filters = [MoneyMovement.account_id == account_id, MoneyMovement.deleted_at.is_(None)]
+    if from_ is not None:
+        filters.append(MoneyMovement.occurred_on >= from_)
+    if to is not None:
+        filters.append(MoneyMovement.occurred_on <= to)
+    if type_ is not None:
+        filters.append(MoneyMovement.type == type_)
+
+    total = (await db.execute(select(func.count()).select_from(MoneyMovement).where(*filters))).scalar_one()
+
+    stmt = (
+        select(MoneyMovement)
+        .where(*filters)
+        .order_by(MoneyMovement.occurred_on.desc(), MoneyMovement.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    items = (await db.execute(stmt)).scalars().all()
+
+    return MovementPage(
+        items=[MovementRead.model_validate(item) for item in items],
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=math.ceil(total / page_size) if total > 0 else 0,
+    )
+
+
+@router.delete("/{account_id}/movements/{movement_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_movement(
+    account_id: uuid.UUID,
+    movement_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> None:
+    """Soft-deletes a movement (income or expense) — sets `deleted_at`, never a hard
+    DELETE. From then on it's excluded from /movements, /incomes, /expenses, and any
+    future aggregate built on top of this table."""
+    result = await db.execute(
+        select(MoneyMovement).where(
+            MoneyMovement.id == movement_id,
+            MoneyMovement.account_id == account_id,
+            MoneyMovement.deleted_at.is_(None),
+        )
+    )
+    movement = result.scalar_one_or_none()
+    if movement is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Movement not found")
+
+    movement.deleted_at = datetime.now(UTC)
+    await db.commit()

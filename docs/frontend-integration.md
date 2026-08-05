@@ -304,10 +304,187 @@ mismos filtros `from`/`to` opcionales.
 
 Response `200`: `list` del mismo shape que la respuesta de `POST /expenses`.
 
-**Fuera de alcance todavía**: edición/borrado de movimientos ya cargados, endpoints de
-agregados (total del día/mes, breakdown por fuente o categoría, histórico), y la "meta
-del mes" (objetivo mensual configurable) — todo eso queda para un pedido posterior sobre
-este mismo modelo.
+#### `GET /accounts/{account_id}/movements?page=&page_size=&from=&to=&type=`
+Vista combinada de ingresos y gastos, paginada — pensada para una tabla mixta (no
+reemplaza `/incomes` ni `/expenses`, que siguen sin paginar para tarjetas/gráficos).
+
+Query params, todos opcionales: `page` (default `1`), `page_size` (default `20`, máximo
+`100`), `from`/`to` (fecha, filtran por `occurred_on`), `type` (`"income"` | `"expense"`,
+para filtrar por tipo si hace falta).
+
+Response `200`:
+```json
+{
+  "items": [
+    { "id": "uuid", "account_id": "uuid", "type": "income", "amount": 800.0, "occurred_on": "2026-07-29", "created_at": "2026-07-29T10:00:00Z", "source": "mentoria", "payment_method": "transferencia", "category": null },
+    { "id": "uuid", "account_id": "uuid", "type": "expense", "amount": 500.0, "occurred_on": "2026-07-29", "created_at": "2026-07-29T09:00:00Z", "source": null, "payment_method": null, "category": "servicios" }
+  ],
+  "page": 1,
+  "page_size": 20,
+  "total": 57,
+  "total_pages": 3
+}
+```
+Cada item trae **todos** los campos de ambos tipos, con `null` en los que no aplican
+según `type` — mismo criterio que `MetaConnectionStatus`. Orden: más reciente primero
+por `occurred_on`, `created_at` como desempate. `total_pages` es `0` si `total` es `0`.
+
+Esta es la primera ruta paginada de la API (antes no había ninguna — ver
+"Limitaciones conocidas" más abajo, que ya no aplica a este endpoint puntual).
+
+#### `DELETE /accounts/{account_id}/movements/{movement_id}`
+Borra (soft-delete) un ingreso o gasto ya cargado. Un movimiento borrado deja de
+aparecer en este endpoint, en `/incomes` y en `/expenses` — no se puede deshacer todavía.
+
+Response `204` sin contenido. Errores: `404` si `movement_id` no existe en ese negocio
+o si ya estaba borrado.
+
+**Fuera de alcance todavía**: edición de movimientos existentes, restaurar un borrado,
+exportar (CSV, etc.), endpoints de agregados (total del día/mes, breakdown por fuente o
+categoría, histórico), y la "meta del mes" (objetivo mensual configurable) — todo eso
+queda para un pedido posterior sobre este mismo modelo.
+
+### Leads (tablero kanban)
+
+Requiere Bearer + ser miembro del negocio (`owner` o `collaborator`) o admin en los 8
+endpoints — igual que Dinero, no hace falta ser `owner`.
+
+**Dos estados independientes a no confundir:**
+- `archived` (bool): un lead archivado sale del tablero pero **sigue contando para las
+  métricas** (`/leads/stats`) y sigue apareciendo en la tabla paginada (`/leads`).
+- Soft delete (`deleted_at`, no expuesto en la respuesta): un lead borrado desaparece de
+  **todo** — tablero, tabla paginada y métricas.
+
+**Decisión de diseño sobre `converted_at`:** si un lead que ya estaba en `stage:
+"convertida"` se mueve (drag and drop) a cualquier otra etapa, `converted_at` se limpia
+(vuelve a `null`). Si más adelante vuelve a `"convertida"`, `converted_at` se completa de
+nuevo con la fecha de ese momento — no la original. No asumir que `converted_at`, una vez
+seteado, se mantiene para siempre.
+
+#### `POST /accounts/{account_id}/leads`
+Crea un lead. Siempre nace en `stage: "nuevo"` — no se manda `stage` en el request.
+
+Request:
+```json
+{ "name": "María", "channel": "instagram" }
+```
+`channel`: uno de `"instagram" | "whatsapp" | "referido" | "web" | "otro"`.
+
+Response `201`, un `LeadRead` completo:
+```json
+{
+  "id": "uuid",
+  "account_id": "uuid",
+  "name": "María",
+  "channel": "instagram",
+  "stage": "nuevo",
+  "stage_changed_at": "2026-07-30T10:00:00Z",
+  "converted_at": null,
+  "archived": false,
+  "archive_reason": null,
+  "archived_at": null,
+  "created_at": "2026-07-30T10:00:00Z"
+}
+```
+
+#### `GET /accounts/{account_id}/leads/board`
+Sin paginar. Solo leads activos (`archived: false`, sin soft delete) — es la data cruda
+para las columnas del tablero; agrupar por `stage` del lado del cliente. Orden: más
+reciente primero por `created_at`.
+
+Response `200`: `list[LeadRead]` (mismo shape que arriba).
+
+#### `PATCH /accounts/{account_id}/leads/{lead_id}/stage`
+Mueve un lead a otra etapa — esto es lo que dispara el drag and drop. Sin restricción de
+orden: se puede mover para adelante, para atrás, o saltear columnas.
+
+Request:
+```json
+{ "stage": "conversacion" }
+```
+`stage`: uno de `"nuevo" | "conversacion" | "propuesta" | "agendada" | "convertida"`.
+
+Efecto: actualiza `stage_changed_at` a ahora. Si `stage` pasa a `"convertida"` y
+`converted_at` era `null`, lo completa. Si pasa a cualquier otra etapa, limpia
+`converted_at` (ver nota de diseño arriba).
+
+Response `200`: `LeadRead` actualizado.
+Errores: `404` si el lead no existe, está archivado, o tiene soft delete — no se puede
+mover algo que no está en el tablero.
+
+#### `POST /accounts/{account_id}/leads/{lead_id}/archive`
+Archiva un lead individual (botón por card, fuera de la columna `convertida`).
+
+Request:
+```json
+{ "reason": "not_converted" }
+```
+`reason`: uno de `"converted" | "not_converted"`.
+
+Efecto: `archived: true`, `archive_reason` = lo recibido, `archived_at` = ahora. El
+`stage` no cambia.
+
+Response `200`: `LeadRead` actualizado.
+Errores: `404` si no existe, ya está archivado o tiene soft delete. `422` si `reason` no
+es un valor válido.
+
+#### `POST /accounts/{account_id}/leads/archive-converted`
+Botón "Archivar convertidos": archiva de una **todos** los leads activos que están en
+`stage: "convertida"`, con `archive_reason: "converted"` forzado del lado del servidor
+(no hace falta mandar nada en el body). Atómico — evita loopear `POST .../archive` una
+vez por card desde el frontend.
+
+Response `200`: `list[LeadRead]` — todos los leads que quedaron archivados por esta
+llamada (lista vacía si no había ninguno en `"convertida"`).
+
+#### `DELETE /accounts/{account_id}/leads/{lead_id}`
+Soft-delete — mismo patrón que `DELETE /accounts/{account_id}/movements/{movement_id}`.
+Funciona tanto sobre un lead activo como uno ya archivado.
+
+Response `204` sin contenido.
+Errores: `404` si no existe o ya estaba borrado.
+
+#### `GET /accounts/{account_id}/leads?page=&page_size=&stage=&archived=&archive_reason=`
+Tabla paginada con todos los leads (activos y archivados, nunca soft-deleted) — mismo
+shape de paginación que `GET /accounts/{account_id}/movements`.
+
+Query params, todos opcionales: `page` (default `1`), `page_size` (default `20`, máximo
+`100`), `stage` (filtra por etapa exacta), `archived` (`true`/`false` — sin este filtro
+trae activos y archivados juntos), `archive_reason` (`"converted"` | `"not_converted"`).
+
+Response `200`:
+```json
+{
+  "items": [ { "...": "LeadRead" } ],
+  "page": 1,
+  "page_size": 20,
+  "total": 34,
+  "total_pages": 2
+}
+```
+Orden: más reciente primero por `created_at`.
+
+#### `GET /accounts/{account_id}/leads/stats`
+Métricas para las tarjetas de arriba del tablero.
+
+Response `200`:
+```json
+{ "active_count": 8, "conversion_rate": 0.25, "avg_conversion_days": 4.2 }
+```
+- `active_count`: cantidad de leads con `archived: false` (sin soft-deleted), sin
+  importar en qué columna están.
+- `conversion_rate`: `convertidos / (convertidos + no_convertidos)`, como fracción
+  `0..1` (multiplicar por 100 en el frontend para el %). `convertidos` = archivados con
+  `archive_reason: "converted"` **más** activos que están en `stage: "convertida"`
+  todavía sin archivar. `no_convertidos` = archivados con `archive_reason:
+  "not_converted"`. Los leads activos en las otras 4 columnas no entran en esta cuenta.
+  `null` si el denominador da `0` (todavía no hay ningún convertido ni no convertido).
+- `avg_conversion_days`: promedio en días de `(converted_at - created_at)` sobre el
+  mismo conjunto de "convertidos" de arriba. `null` si ese conjunto está vacío.
+
+**Fuera de alcance todavía**: editar campos de un lead ya creado (nombre, canal),
+restaurar un soft-delete o des-archivar uno archivado, notas/comentarios, asignación a
+colaboradores, recordatorios.
 
 ### Admin (solo `role: "admin"` de plataforma — ocultar toda esta sección si `role !== "admin"`)
 
@@ -369,6 +546,10 @@ frontend (splash screen, banner de "backend caído").
 - Fuente de ingreso (`IncomeRead.source`): `"mentoria"`, `"comunidad"`, `"claridad"`, `"producto"`, `"otro"`
 - Método de pago (`IncomeRead.payment_method`): `"transferencia"`, `"stripe"`, `"mercadopago"`, `"paypal"`, `"efectivo"`
 - Categoría de gasto (`ExpenseRead.category`): `"herramientas"`, `"publicidad"`, `"educacion"`, `"servicios"`, `"otro"`
+- Tipo de movimiento (`MovementRead.type`, filtro `type` de `/movements`): `"income"`, `"expense"`
+- Canal de lead (`LeadRead.channel`): `"instagram"`, `"whatsapp"`, `"referido"`, `"web"`, `"otro"`
+- Etapa de lead (`LeadRead.stage`, filtro `stage` de `/leads`): `"nuevo"`, `"conversacion"`, `"propuesta"`, `"agendada"`, `"convertida"`
+- Motivo de archivado (`LeadRead.archive_reason`): `"converted"`, `"not_converted"`
 
 ## Limitaciones conocidas a tener en cuenta en el diseño del frontend
 
@@ -386,9 +567,11 @@ frontend (splash screen, banner de "backend caído").
   termine en una URL del frontend después del OAuth, hay que coordinarlo con el equipo de
   backend (cambiar `META_REDIRECT_URI` a una ruta del frontend que llame a este endpoint
   vía fetch, en vez de que Meta pegue directo al backend).
-- **Sin paginación**: `GET /admin/users`, `GET /admin/accounts`, listas de miembros, etc.
-  devuelven todo sin paginar — con pocos datos hoy no importa, pero no asumir que
-  seguirá así indefinidamente.
+- **Paginación solo en `/movements` y `/leads`**: son las únicas rutas paginadas de la
+  API (misma convención `page`/`page_size` en ambas). `GET /admin/users`,
+  `GET /admin/accounts`, `/incomes`, `/expenses`, `/leads/board`, listas de miembros,
+  etc. siguen devolviendo todo sin paginar — con pocos datos hoy no importa, pero no
+  asumir que seguirá así indefinidamente.
 - **Sin rate limiting ni CSRF** implementados todavía a nivel de API.
 
 ## Ver también

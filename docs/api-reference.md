@@ -27,6 +27,21 @@ apropiados (401/403/404/409/502). Documentación interactiva viva: `/docs` (Swag
 | GET | `/accounts/{account_id}/incomes?from=&to=` | miembro del negocio o admin | Lista ingresos, más reciente primero por `occurred_on`, filtro opcional por rango de fechas. |
 | POST | `/accounts/{account_id}/expenses` | miembro del negocio o admin | Registra un gasto (`amount`, `occurred_on`, `category`). |
 | GET | `/accounts/{account_id}/expenses?from=&to=` | miembro del negocio o admin | Lista gastos, más reciente primero por `occurred_on`, filtro opcional por rango de fechas. |
+| GET | `/accounts/{account_id}/movements?page=&page_size=&from=&to=&type=` | miembro del negocio o admin | Vista combinada de ingresos y gastos, paginada (`page`/`page_size`), con `type` expuesto. |
+| DELETE | `/accounts/{account_id}/movements/{movement_id}` | miembro del negocio o admin | Soft-delete de un ingreso o gasto (`deleted_at`). 404 si no existe o ya estaba borrado. |
+
+## Leads (`app/api/routes/leads.py`)
+
+| Método | Path | Auth | Descripción |
+|---|---|---|---|
+| POST | `/accounts/{account_id}/leads` | miembro del negocio o admin | Crea un lead, siempre en `stage: "nuevo"`. |
+| GET | `/accounts/{account_id}/leads?page=&page_size=&stage=&archived=&archive_reason=` | miembro del negocio o admin | Tabla paginada, activos + archivados, nunca soft-deleted. |
+| GET | `/accounts/{account_id}/leads/board` | miembro del negocio o admin | Data cruda del kanban, sin paginar — solo leads activos. |
+| GET | `/accounts/{account_id}/leads/stats` | miembro del negocio o admin | `active_count`, `conversion_rate`, `avg_conversion_days`. |
+| POST | `/accounts/{account_id}/leads/archive-converted` | miembro del negocio o admin | Archiva de una todos los activos en `stage: "convertida"` (`archive_reason: "converted"` forzado). |
+| PATCH | `/accounts/{account_id}/leads/{lead_id}/stage` | miembro del negocio o admin | Mueve de etapa (drag and drop). Limpia `converted_at` si sale de `"convertida"`. |
+| POST | `/accounts/{account_id}/leads/{lead_id}/archive` | miembro del negocio o admin | Archiva un lead puntual con el `reason` recibido. |
+| DELETE | `/accounts/{account_id}/leads/{lead_id}` | miembro del negocio o admin | Soft-delete. Funciona sobre leads activos o archivados. |
 
 ## Meta (`app/api/routes/meta.py`)
 
