@@ -268,15 +268,18 @@ contra una cuenta real** — ver nota abajo.
 Response `200`:
 ```json
 [
-  { "contact_name": "Laura", "hours_since_last_message": 50 },
-  { "contact_name": "Carmen", "hours_since_last_message": 76 }
+  { "conversation_id": "17841400000000000_1234567890", "contact_name": "Laura", "hours_since_last_message": 50 },
+  { "conversation_id": "17841400000000000_9876543210", "contact_name": "Carmen", "hours_since_last_message": 76 }
 ]
 ```
 Lista vacía si no hay ninguna conversación esperando respuesta (dentro de las `limit`
 escaneadas — no es un barrido de *todas* las conversaciones del negocio, ver nota).
 `contact_name` sale de `username` (preferido) o `name` del participante que no es la
 propia Página/cuenta de IG; si no hay ninguno de los dos, cae al `id` crudo del
-participante como último recurso.
+participante como último recurso. `conversation_id` es el `id` de la conversación tal
+cual lo devuelve la Graph API — úsalo como `conversation_ref` al crear una tarea desde
+esta sugerencia (ver sección "Tareas"), nunca `contact_name`, porque dos contactos
+distintos pueden compartir el mismo nombre visible.
 
 **Puede tardar hasta 60 segundos.** El edge `/{page-id}/conversations` de Meta es
 notablemente lento mientras la app está en Development Mode — mucho más que el resto de
@@ -538,6 +541,78 @@ Response `200`:
 restaurar un soft-delete o des-archivar uno archivado, notas/comentarios, asignación a
 colaboradores, recordatorios.
 
+### Tareas
+
+Requiere Bearer + ser miembro del negocio (`owner` o `collaborator`) o admin, igual que
+Dinero y Leads.
+
+El mismo modal de "Agregar tarea" se usa en dos lugares: el botón directo de
+`/dashboard/actions` (campos en blanco), y los botones "Crear tarea" de "Atención hoy"
+en `/dashboard/home` (pre-cargado con título/notas/prioridad alta según la sugerencia).
+La tarjeta "Tareas de hoy" del home y la lista de `/dashboard/actions` salen del mismo
+`GET /accounts/{account_id}/tasks?date=` — no hay endpoint de resumen aparte.
+
+**Sin dedup del lado del servidor**: si ya existe una tarea de hoy con
+`suggestion_type: "posting_reminder"`, o con `suggestion_type: "unanswered_conversation"`
+y el `conversation_ref` que corresponde a esa conversación puntual, el frontend es quien
+decide no volver a ofrecer esa sugerencia — comparando contra la lista que ya trae de
+`GET /tasks?date=`. El backend no valida ni bloquea nada de esto.
+
+#### `POST /accounts/{account_id}/tasks`
+Crea una tarea. Nace siempre en `done: false`.
+
+Request:
+```json
+{ "title": "Publicar contenido hoy", "notes": "Llevás 2 días sin publicar", "priority": "alta", "suggestion_type": "posting_reminder", "conversation_ref": null }
+```
+- `title`: requerido.
+- `notes`: opcional.
+- `priority`: requerido, uno de `"alta" | "media" | "baja"`.
+- `suggestion_type`: opcional (`null` si no se manda) — uno de `"posting_reminder" |
+  "unanswered_conversation"`. `null` cuando la creó la usuaria manualmente.
+- `conversation_ref`: opcional (`null` si no se manda). Solo tiene sentido cuando
+  `suggestion_type` es `"unanswered_conversation"` — mandar ahí el `conversation_id` que
+  devolvió `GET /dashboard/{account_id}/unanswered-conversations`, no `contact_name`. El
+  backend lo guarda tal cual, sin validarlo contra la Graph API.
+
+Response `201`, un `TaskRead` completo:
+```json
+{
+  "id": "uuid",
+  "account_id": "uuid",
+  "title": "Publicar contenido hoy",
+  "notes": "Llevás 2 días sin publicar",
+  "priority": "alta",
+  "done": false,
+  "suggestion_type": "posting_reminder",
+  "conversation_ref": null,
+  "created_at": "2026-07-30T09:00:00Z"
+}
+```
+
+#### `GET /accounts/{account_id}/tasks?date=`
+Sin paginar (siempre son pocas). `date` (`YYYY-MM-DD`, opcional) filtra por la fecha de
+`created_at`; si no se manda, el backend usa el día de hoy en UTC — pero mandalo siempre
+explícito, calculado en el huso horario del browser, para no depender de qué "hoy"
+asuma el servidor.
+
+Response `200`: `list[TaskRead]`, más reciente primero por `created_at`. Agrupar por
+`priority` del lado del cliente — no vienen ordenadas por eso.
+
+#### `PATCH /accounts/{account_id}/tasks/{task_id}`
+Cambia el estado de una tarea (el checkbox pendiente ⇄ completa).
+
+Request:
+```json
+{ "done": true }
+```
+Response `200`: `TaskRead` actualizado. Errores: `404` si no existe.
+
+**Fuera de alcance todavía**: editar `title`/`notes`/`priority` de una tarea ya creada,
+borrarla, categorías (Dinero/Audiencia/Leads/Operaciones), deshacer/restaurar,
+recordatorios, asignación a colaboradores, tareas con fecha futura (todas nacen "para
+hoy").
+
 ### Admin (solo `role: "admin"` de plataforma — ocultar toda esta sección si `role !== "admin"`)
 
 #### `GET /admin/users?role=&is_active=`
@@ -602,6 +677,8 @@ frontend (splash screen, banner de "backend caído").
 - Canal de lead (`LeadRead.channel`): `"instagram"`, `"whatsapp"`, `"referido"`, `"web"`, `"otro"`
 - Etapa de lead (`LeadRead.stage`, filtro `stage` de `/leads`): `"nuevo"`, `"conversacion"`, `"propuesta"`, `"agendada"`, `"convertida"`
 - Motivo de archivado (`LeadRead.archive_reason`): `"converted"`, `"not_converted"`
+- Prioridad de tarea (`TaskRead.priority`): `"alta"`, `"media"`, `"baja"`
+- Origen de tarea sugerida (`TaskRead.suggestion_type`): `"posting_reminder"`, `"unanswered_conversation"`
 
 ## Limitaciones conocidas a tener en cuenta en el diseño del frontend
 

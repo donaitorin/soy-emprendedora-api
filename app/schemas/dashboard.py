@@ -22,5 +22,6 @@ class PostingStatus(BaseModel):
 
 
 class UnansweredConversation(BaseModel):
+    conversation_id: str
     contact_name: str
     hours_since_last_message: int

@@ -5,7 +5,8 @@ from app.models.entitlement import Entitlement
 from app.models.lead import Lead
 from app.models.meta_connection import MetaConnection
 from app.models.money_movement import MoneyMovement
+from app.models.task import Task
 from app.models.user import User
 from app.models.user_account import UserAccount
 
-__all__ = ["Account", "Entitlement", "Lead", "MetaConnection", "MoneyMovement", "User", "UserAccount"]
+__all__ = ["Account", "Entitlement", "Lead", "MetaConnection", "MoneyMovement", "Task", "User", "UserAccount"]

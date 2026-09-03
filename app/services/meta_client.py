@@ -199,6 +199,10 @@ async def get_ig_unanswered_conversations(
     results = []
 
     for conversation in response.json().get("data", []):
+        conversation_id = conversation.get("id")
+        if not conversation_id:
+            continue  # can't build a stable ref for it — skip rather than guess
+
         messages = conversation.get("messages", {}).get("data", [])
         if not messages:
             continue
@@ -221,6 +225,7 @@ async def get_ig_unanswered_conversations(
 
         results.append(
             {
+                "conversation_id": conversation_id,
                 "contact_name": contact_name,
                 "hours_since_last_message": int(
                     (datetime.now(created_time.tzinfo) - created_time).total_seconds() // 3600

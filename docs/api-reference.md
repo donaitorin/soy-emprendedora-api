@@ -43,6 +43,14 @@ apropiados (401/403/404/409/502). Documentación interactiva viva: `/docs` (Swag
 | POST | `/accounts/{account_id}/leads/{lead_id}/archive` | miembro del negocio o admin | Archiva un lead puntual con el `reason` recibido. |
 | DELETE | `/accounts/{account_id}/leads/{lead_id}` | miembro del negocio o admin | Soft-delete. Funciona sobre leads activos o archivados. |
 
+## Tasks (`app/api/routes/tasks.py`)
+
+| Método | Path | Auth | Descripción |
+|---|---|---|---|
+| POST | `/accounts/{account_id}/tasks` | miembro del negocio o admin | Crea una tarea, siempre `done: false`. |
+| GET | `/accounts/{account_id}/tasks?date=` | miembro del negocio o admin | Tareas de un día (default hoy en UTC), sin paginar. |
+| PATCH | `/accounts/{account_id}/tasks/{task_id}` | miembro del negocio o admin | Cambia `done`. 404 si no existe. |
+
 ## Meta (`app/api/routes/meta.py`)
 
 | Método | Path | Auth | Descripción |
@@ -73,7 +81,7 @@ Detalle completo del flujo en [meta-integration.md](meta-integration.md).
 |---|---|---|---|
 | GET | `/dashboard/{account_id}/insights` | miembro del negocio o admin + `check_entitlement` | Insights básicos de IG (followers, impressions, reach) vía Graph API. 404 si no hay conexión Meta activa; 502 si la Graph API falla. |
 | GET | `/dashboard/{account_id}/posting-status` | miembro del negocio o admin + `check_entitlement` | Fecha del último post y días transcurridos. `null`/`null` si nunca publicó (no es error). Mismos 404/502 que `/insights`. |
-| GET | `/dashboard/{account_id}/unanswered-conversations?limit=` | miembro del negocio o admin + `check_entitlement` | Conversaciones de IG esperando respuesta nuestra (`limit` default 2, máx 50). **No verificado contra una cuenta real** — ver [frontend-integration.md](frontend-integration.md). |
+| GET | `/dashboard/{account_id}/unanswered-conversations?limit=` | miembro del negocio o admin + `check_entitlement` | Conversaciones de IG esperando respuesta nuestra, con `conversation_id` estable (usar como `Task.conversation_ref`). `limit` default 2, máx 50; timeout propio de 60s. **No verificado contra una cuenta real** — ver [frontend-integration.md](frontend-integration.md). |
 
 ## Misceláneo
 

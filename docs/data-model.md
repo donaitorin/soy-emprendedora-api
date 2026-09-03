@@ -11,6 +11,7 @@ erDiagram
     ACCOUNTS ||--o{ META_CONNECTIONS : "tiene (histórico)"
     ACCOUNTS ||--o{ MONEY_MOVEMENTS : "tiene"
     ACCOUNTS ||--o{ LEADS : "tiene"
+    ACCOUNTS ||--o{ TASKS : "tiene"
 
     USERS {
         uuid id PK
@@ -87,6 +88,17 @@ erDiagram
         timestamp created_at
         timestamp deleted_at "soft delete, NULL = activo"
     }
+    TASKS {
+        uuid id PK
+        uuid account_id FK
+        string title
+        text notes
+        enum priority "alta|media|baja"
+        bool done
+        enum suggestion_type "posting_reminder|unanswered_conversation, NULL si manual"
+        string conversation_ref "solo si suggestion_type=unanswered_conversation"
+        timestamp created_at
+    }
 ```
 
 ## Tablas
@@ -151,3 +163,14 @@ drop, `app/api/routes/leads.py::update_lead_stage`); `converted_at` se completa 
 primera vez que `stage` pasa a `convertida` y **se limpia** si el lead se mueve a
 cualquier otra etapa (decisión de producto explícita — si vuelve a `convertida` más
 tarde, se completa de nuevo con la fecha de ese momento, no la original).
+
+### `tasks`
+Tareas de un `account`, siempre "para hoy" (sin fecha de vencimiento ni recurrencia).
+`suggestion_type` es `NULL` cuando la usuaria la creó manualmente desde "Agregar tarea";
+si nació de una sugerencia de "Atención hoy" (`app/dashboard/{account_id}/posting-status`
+o `.../unanswered-conversations`), guarda cuál. `conversation_ref` solo se completa
+cuando `suggestion_type=unanswered_conversation` — guarda el `conversation_id` que
+devuelve `GET /dashboard/{account_id}/unanswered-conversations`, sin validarlo contra la
+Graph API. No hay deduplicación de sugerencias a nivel de base ni de API: el frontend
+decide si ya existe una tarea equivalente hoy comparando contra `GET /tasks?date=` antes
+de ofrecer la sugerencia de nuevo (ver `app/models/task.py::SuggestionType`).

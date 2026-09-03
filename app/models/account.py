@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.lead import Lead
     from app.models.meta_connection import MetaConnection
     from app.models.money_movement import MoneyMovement
+    from app.models.task import Task
     from app.models.user_account import UserAccount
 
 
@@ -33,3 +34,4 @@ class Account(Base):
     meta_connections: Mapped[list["MetaConnection"]] = relationship(back_populates="account")
     money_movements: Mapped[list["MoneyMovement"]] = relationship(back_populates="account")
     leads: Mapped[list["Lead"]] = relationship(back_populates="account")
+    tasks: Mapped[list["Task"]] = relationship(back_populates="account")
