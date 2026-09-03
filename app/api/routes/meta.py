@@ -62,8 +62,11 @@ async def callback(
     except jwt.PyJWTError:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired state")
 
-    user_access_token = await meta_client.exchange_code_for_token(code)
-    pages = await meta_client.get_user_pages(user_access_token)
+    try:
+        user_access_token = await meta_client.exchange_code_for_token(code)
+        pages = await meta_client.get_user_pages(user_access_token)
+    except meta_client.MetaAPIError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Meta Graph API error: {exc}")
 
     if not pages:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No Facebook Pages available for this account")

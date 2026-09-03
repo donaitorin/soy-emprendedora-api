@@ -35,7 +35,7 @@ apropiados (401/403/404/409/502). Documentación interactiva viva: `/docs` (Swag
 | Método | Path | Auth | Descripción |
 |---|---|---|---|
 | POST | `/accounts/{account_id}/leads` | miembro del negocio o admin | Crea un lead, siempre en `stage: "nuevo"`. |
-| GET | `/accounts/{account_id}/leads?page=&page_size=&stage=&archived=&archive_reason=` | miembro del negocio o admin | Tabla paginada, activos + archivados, nunca soft-deleted. |
+| GET | `/accounts/{account_id}/leads?page=&page_size=&stage=&archived=&archive_reason=&created_from=&created_to=` | miembro del negocio o admin | Tabla paginada, activos + archivados, nunca soft-deleted. `created_from`/`created_to` filtran por fecha de `created_at`. |
 | GET | `/accounts/{account_id}/leads/board` | miembro del negocio o admin | Data cruda del kanban, sin paginar — solo leads activos. |
 | GET | `/accounts/{account_id}/leads/stats` | miembro del negocio o admin | `active_count`, `conversion_rate`, `avg_conversion_days`. |
 | POST | `/accounts/{account_id}/leads/archive-converted` | miembro del negocio o admin | Archiva de una todos los activos en `stage: "convertida"` (`archive_reason: "converted"` forzado). |
@@ -72,6 +72,8 @@ Detalle completo del flujo en [meta-integration.md](meta-integration.md).
 | Método | Path | Auth | Descripción |
 |---|---|---|---|
 | GET | `/dashboard/{account_id}/insights` | miembro del negocio o admin + `check_entitlement` | Insights básicos de IG (followers, impressions, reach) vía Graph API. 404 si no hay conexión Meta activa; 502 si la Graph API falla. |
+| GET | `/dashboard/{account_id}/posting-status` | miembro del negocio o admin + `check_entitlement` | Fecha del último post y días transcurridos. `null`/`null` si nunca publicó (no es error). Mismos 404/502 que `/insights`. |
+| GET | `/dashboard/{account_id}/unanswered-conversations?limit=` | miembro del negocio o admin + `check_entitlement` | Conversaciones de IG esperando respuesta nuestra (`limit` default 2, máx 50). **No verificado contra una cuenta real** — ver [frontend-integration.md](frontend-integration.md). |
 
 ## Misceláneo
 

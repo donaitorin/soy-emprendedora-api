@@ -245,6 +245,54 @@ Errores: `404` si el negocio no tiene conexión Meta activa (mostrar CTA para co
 Instagram); `502` si la Graph API de Meta falla (mostrar estado de error transitorio,
 reintentable).
 
+#### `GET /dashboard/{account_id}/posting-status`
+Para el aviso de "Llevás X días sin publicar". Mismos requisitos y errores que
+`/insights` (`404` sin conexión activa, `502` si la Graph API falla).
+
+Response `200`:
+```json
+{ "last_post_at": "2026-07-28T14:00:00Z", "days_since_last_post": 2 }
+```
+Si la cuenta nunca publicó nada, ambos campos vienen `null` — es un estado válido
+("todavía no publicaste"), no un error ni un 404 (eso queda reservado para "no hay
+conexión").
+
+#### `GET /dashboard/{account_id}/unanswered-conversations?limit=`
+Para el aviso de "Fulana y Mengana llevan +48h sin respuesta". Mismos requisitos y
+errores que `/insights`.
+
+`limit` (query param opcional, default `2`, máximo `50`): cuántas conversaciones recientes
+escanea/devuelve como máximo. **Está en `2` a propósito mientras se valida este endpoint
+contra una cuenta real** — ver nota abajo.
+
+Response `200`:
+```json
+[
+  { "contact_name": "Laura", "hours_since_last_message": 50 },
+  { "contact_name": "Carmen", "hours_since_last_message": 76 }
+]
+```
+Lista vacía si no hay ninguna conversación esperando respuesta (dentro de las `limit`
+escaneadas — no es un barrido de *todas* las conversaciones del negocio, ver nota).
+`contact_name` sale de `username` (preferido) o `name` del participante que no es la
+propia Página/cuenta de IG; si no hay ninguno de los dos, cae al `id` crudo del
+participante como último recurso.
+
+**Puede tardar hasta 60 segundos.** El edge `/{page-id}/conversations` de Meta es
+notablemente lento mientras la app está en Development Mode — mucho más que el resto de
+la Graph API — así que este endpoint tiene un timeout propio de 60s en el backend (el
+resto usa 10s). Mostrar un loading state acorde en el frontend, no asumir la latencia
+rápida del resto del dashboard. Pasado ese minuto sin respuesta, el backend devuelve
+`502` en vez de colgarse.
+
+**⚠️ No probado contra una cuenta de Instagram real todavía** (no hay forma de validarlo
+sin credenciales reales de Meta en este entorno) — a diferencia del resto de la API, este
+endpoint puntual está implementado siguiendo la forma documentada de la Graph API pero
+sin una llamada real de punta a punta. Antes de depender de él en producción, probarlo
+con una cuenta con conversaciones reales y avisar si `contact_name` termina saliendo de
+un campo distinto al esperado, o si la forma de la respuesta de
+`/{page-id}/conversations` no coincide con lo asumido acá.
+
 ### Dinero (ingresos y gastos)
 
 Requiere Bearer + ser miembro del negocio (`owner` o `collaborator`) o admin — a
@@ -444,13 +492,17 @@ Funciona tanto sobre un lead activo como uno ya archivado.
 Response `204` sin contenido.
 Errores: `404` si no existe o ya estaba borrado.
 
-#### `GET /accounts/{account_id}/leads?page=&page_size=&stage=&archived=&archive_reason=`
+#### `GET /accounts/{account_id}/leads?page=&page_size=&stage=&archived=&archive_reason=&created_from=&created_to=`
 Tabla paginada con todos los leads (activos y archivados, nunca soft-deleted) — mismo
 shape de paginación que `GET /accounts/{account_id}/movements`.
 
 Query params, todos opcionales: `page` (default `1`), `page_size` (default `20`, máximo
 `100`), `stage` (filtra por etapa exacta), `archived` (`true`/`false` — sin este filtro
-trae activos y archivados juntos), `archive_reason` (`"converted"` | `"not_converted"`).
+trae activos y archivados juntos), `archive_reason` (`"converted"` | `"not_converted"`),
+`created_from`/`created_to` (fecha `YYYY-MM-DD`, filtran por la fecha de `created_at`,
+inclusive — mismo criterio que `from`/`to` en `/incomes` y `/expenses`). Un lead que se
+archivó después sigue contando en el día en que se creó — este filtro no distingue
+estado actual, solo fecha de creación.
 
 Response `200`:
 ```json

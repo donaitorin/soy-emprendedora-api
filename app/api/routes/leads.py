@@ -1,6 +1,6 @@
 import math
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, func, or_, select
@@ -69,6 +69,8 @@ async def list_leads(
     stage: LeadStage | None = Query(None),
     archived: bool | None = Query(None),
     archive_reason: ArchiveReason | None = Query(None),
+    created_from: date | None = Query(None),
+    created_to: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
     _=Depends(require_business_access),
 ) -> LeadPage:
@@ -81,6 +83,10 @@ async def list_leads(
         filters.append(Lead.archived.is_(archived))
     if archive_reason is not None:
         filters.append(Lead.archive_reason == archive_reason)
+    if created_from is not None:
+        filters.append(func.date(Lead.created_at) >= created_from)
+    if created_to is not None:
+        filters.append(func.date(Lead.created_at) <= created_to)
 
     total = (await db.execute(select(func.count()).select_from(Lead).where(*filters))).scalar_one()
 
