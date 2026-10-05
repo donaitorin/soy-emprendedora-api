@@ -238,12 +238,33 @@ Requiere Bearer + ser miembro del negocio o admin.
 
 Response `200`:
 ```json
-{ "ig_business_id": "456", "ig_username": "minegocio", "followers_count": 1200, "impressions": 340, "reach": 290 }
+{ "ig_business_id": "456", "ig_username": "minegocio", "followers_count": 1200, "impressions": 340, "reach_yesterday": 107, "reach_two_days_ago": 130 }
 ```
 Cualquier campo de métricas puede venir `null` si la Graph API no lo devuelve.
 Errores: `404` si el negocio no tiene conexión Meta activa (mostrar CTA para conectar
 Instagram); `502` si la Graph API de Meta falla (mostrar estado de error transitorio,
 reintentable).
+
+**No hay campo de `reach` del día en curso, a propósito.** El reach de Meta se va
+acumulando durante el día del lado de ellos, así que "el reach de hoy" viene `null` o
+engañosamente bajo la mayor parte del día — no es un bug, es que la métrica todavía no
+está consolidada. Por eso la tarjeta de "Alcance" compara los **últimos dos días ya
+cerrados**:
+- `reach_yesterday`: reach de ayer (día ya cerrado) — el número grande de la tarjeta.
+- `reach_two_days_ago`: reach de antesdeayer — solo como base de comparación.
+
+Ambos usan `since`/`until` fijados explícitamente a un día calendario exacto en UTC, no
+una ventana default de Meta (sin esto, la Graph API cae en un rango no documentado —
+confirmado como problema real en un proyecto anterior, ver `docs/AUTH_FLOW_REFERENCE.md`).
+Para la variación (`↑15%`/`↓8%`), calcular `(reach_yesterday - reach_two_days_ago) /
+reach_two_days_ago` del lado del cliente — el backend no manda el porcentaje ni el
+signo. Cualquiera de los dos puede venir `null` si Meta no tiene dato para ese día (ej.
+cuenta recién conectada).
+
+`impressions` sigue leyendo la ventana del día en curso (no cambió) — probablemente
+tenga el mismo problema de "no consolidado todavía" que tenía `reach`, pero como no lo
+consume ninguna pantalla todavía, se dejó así por ahora. Tenerlo en cuenta para cuando
+se implemente `/dashboard/audience`.
 
 #### `GET /dashboard/{account_id}/posting-status`
 Para el aviso de "Llevás X días sin publicar". Mismos requisitos y errores que

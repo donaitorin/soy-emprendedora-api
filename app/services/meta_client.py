@@ -4,7 +4,7 @@ All calls that require the app secret happen server-side only — the `code` obt
 by the frontend redirect is exchanged for an access token here, never in the browser.
 """
 
-from datetime import datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -92,23 +92,81 @@ async def get_user_pages(user_access_token: str) -> list[dict[str, Any]]:
     return response.json().get("data", [])
 
 
+def _day_window(day: date) -> tuple[str, str]:
+    """`since`/`until` pinning the Graph API's period=day insights to exactly one UTC
+    calendar day — without these, Meta falls back to an undocumented default window
+    (confirmed the hard way on a previous project; see docs/AUTH_FLOW_REFERENCE.md),
+    which made "today's reach" not reliably mean today."""
+    return day.isoformat(), (day + timedelta(days=1)).isoformat()
+
+
+def _first_metric_value(insights_response: httpx.Response, metric: str) -> int | None:
+    if insights_response.status_code != 200:
+        return None
+    for entry in insights_response.json().get("data", []):
+        if entry.get("name") == metric:
+            values = entry.get("values", [])
+            if values:
+                return values[-1].get("value")
+    return None
+
+
 async def get_ig_insights(ig_business_id: str, page_access_token: str) -> dict[str, Any]:
-    """Fetch basic IG Business insights: followers, impressions, reach.
+    """Fetch basic IG Business insights: followers, impressions (today), and reach for
+    the last two *closed* days (yesterday + the day before) for the frontend's
+    day-over-day "↑15%" indicator.
+
+    Reach is deliberately never read for the current day: it accumulates through the
+    day on Meta's side, so "today's reach" is null or misleadingly low most of the
+    day — not a bug, just not a meaningful number to show. Comparing the last two
+    closed days instead means both sides of the comparison are (almost always) fully
+    settled. `impressions` keeps reading today's window — it has the same
+    still-accumulating caveat, but nothing consumes it yet (see
+    docs/frontend-integration.md).
 
     Metric set kept simple/generic for now — expand as the dashboard grows.
     """
+    today = datetime.now(UTC).date()
+    yesterday = today - timedelta(days=1)
+    two_days_ago = today - timedelta(days=2)
+    today_since, today_until = _day_window(today)
+    yesterday_since, yesterday_until = _day_window(yesterday)
+    two_days_ago_since, two_days_ago_until = _day_window(two_days_ago)
+
     try:
         async with _client() as client:
             profile_response = await client.get(
                 f"{_graph_base_url()}/{ig_business_id}",
                 params={"access_token": page_access_token, "fields": "username,followers_count"},
             )
-            insights_response = await client.get(
+            today_response = await client.get(
                 f"{_graph_base_url()}/{ig_business_id}/insights",
                 params={
                     "access_token": page_access_token,
-                    "metric": "impressions,reach",
+                    "metric": "impressions",
                     "period": "day",
+                    "since": today_since,
+                    "until": today_until,
+                },
+            )
+            yesterday_response = await client.get(
+                f"{_graph_base_url()}/{ig_business_id}/insights",
+                params={
+                    "access_token": page_access_token,
+                    "metric": "reach",
+                    "period": "day",
+                    "since": yesterday_since,
+                    "until": yesterday_until,
+                },
+            )
+            two_days_ago_response = await client.get(
+                f"{_graph_base_url()}/{ig_business_id}/insights",
+                params={
+                    "access_token": page_access_token,
+                    "metric": "reach",
+                    "period": "day",
+                    "since": two_days_ago_since,
+                    "until": two_days_ago_until,
                 },
             )
     except httpx.HTTPError as exc:
@@ -118,18 +176,13 @@ async def get_ig_insights(ig_business_id: str, page_access_token: str) -> dict[s
         raise MetaAPIError(f"Failed to fetch IG profile: {profile_response.text}", profile_response.status_code)
 
     profile = profile_response.json()
-    metrics: dict[str, int] = {}
-    if insights_response.status_code == 200:
-        for entry in insights_response.json().get("data", []):
-            values = entry.get("values", [])
-            if values:
-                metrics[entry["name"]] = values[-1].get("value")
 
     return {
         "ig_username": profile.get("username"),
         "followers_count": profile.get("followers_count"),
-        "impressions": metrics.get("impressions"),
-        "reach": metrics.get("reach"),
+        "impressions": _first_metric_value(today_response, "impressions"),
+        "reach_yesterday": _first_metric_value(yesterday_response, "reach"),
+        "reach_two_days_ago": _first_metric_value(two_days_ago_response, "reach"),
     }
 
 

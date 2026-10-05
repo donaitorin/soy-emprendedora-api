@@ -79,7 +79,7 @@ Detalle completo del flujo en [meta-integration.md](meta-integration.md).
 
 | Método | Path | Auth | Descripción |
 |---|---|---|---|
-| GET | `/dashboard/{account_id}/insights` | miembro del negocio o admin + `check_entitlement` | Insights básicos de IG (followers, impressions, reach) vía Graph API. 404 si no hay conexión Meta activa; 502 si la Graph API falla. |
+| GET | `/dashboard/{account_id}/insights` | miembro del negocio o admin + `check_entitlement` | Insights de IG: followers, impressions (día en curso), y reach de los últimos dos días *cerrados* (`reach_yesterday`, `reach_two_days_ago` — nunca el día en curso, ver [frontend-integration.md](frontend-integration.md)). 404 si no hay conexión Meta activa; 502 si la Graph API falla. |
 | GET | `/dashboard/{account_id}/posting-status` | miembro del negocio o admin + `check_entitlement` | Fecha del último post y días transcurridos. `null`/`null` si nunca publicó (no es error). Mismos 404/502 que `/insights`. |
 | GET | `/dashboard/{account_id}/unanswered-conversations?limit=` | miembro del negocio o admin + `check_entitlement` | Conversaciones de IG esperando respuesta nuestra, con `conversation_id` estable (usar como `Task.conversation_ref`). `limit` default 2, máx 50; timeout propio de 60s. **No verificado contra una cuenta real** — ver [frontend-integration.md](frontend-integration.md). |
 

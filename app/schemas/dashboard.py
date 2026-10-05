@@ -4,13 +4,19 @@ from pydantic import BaseModel
 
 
 class DashboardInsights(BaseModel):
-    """Generic, simplified mapping of IG Business insights. Expand as needed."""
+    """Generic, simplified mapping of IG Business insights. Expand as needed.
+
+    No `reach` field for the current day on purpose — see
+    app/services/meta_client.py::get_ig_insights for why. `reach_yesterday` and
+    `reach_two_days_ago` are always closed, already-settled days.
+    """
 
     ig_business_id: str
     ig_username: str | None
     followers_count: int | None = None
     impressions: int | None = None
-    reach: int | None = None
+    reach_yesterday: int | None = None
+    reach_two_days_ago: int | None = None
 
 
 class PostingStatus(BaseModel):
