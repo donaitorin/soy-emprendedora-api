@@ -54,7 +54,13 @@ async def create_lead(
 ) -> Lead:
     await _get_account_or_404(db, account_id)
 
-    lead = Lead(account_id=account_id, name=payload.name, channel=payload.channel, stage=LeadStage.NUEVO)
+    lead = Lead(
+        account_id=account_id,
+        name=payload.name,
+        channel=payload.channel,
+        description=payload.description,
+        stage=LeadStage.NUEVO,
+    )
     db.add(lead)
     await db.commit()
     await db.refresh(lead)

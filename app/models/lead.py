@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,6 +54,7 @@ class Lead(Base):
         Enum(LeadChannel, name="lead_channel", values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,
     )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     stage: Mapped[LeadStage] = mapped_column(
         Enum(LeadStage, name="lead_stage", values_callable=lambda obj: [e.value for e in obj]),
         nullable=False,

@@ -1,14 +1,30 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.models.lead import ArchiveReason, LeadChannel, LeadStage
+
+DESCRIPTION_MAX_LENGTH = 5000
 
 
 class LeadCreate(BaseModel):
     name: str
     channel: LeadChannel
+    # Raw markdown, stored as-is (the frontend renders it safely). Trimmed; "" -> None.
+    description: str | None = None
+
+    @field_validator("description")
+    @classmethod
+    def _normalize_description(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            return None
+        if len(v) > DESCRIPTION_MAX_LENGTH:
+            raise ValueError(f"description must be at most {DESCRIPTION_MAX_LENGTH} characters")
+        return v
 
 
 class LeadRead(BaseModel):
@@ -18,6 +34,7 @@ class LeadRead(BaseModel):
     account_id: uuid.UUID
     name: str
     channel: LeadChannel
+    description: str | None
     stage: LeadStage
     stage_changed_at: datetime
     converted_at: datetime | None

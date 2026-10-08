@@ -438,9 +438,14 @@ Crea un lead. Siempre nace en `stage: "nuevo"` — no se manda `stage` en el req
 
 Request:
 ```json
-{ "name": "María", "channel": "instagram" }
+{ "name": "María", "channel": "instagram", "description": "**Interesada** en el plan anual" }
 ```
 `channel`: uno de `"instagram" | "whatsapp" | "referido" | "web" | "otro"`.
+
+`description` (opcional, default `null`): texto markdown crudo. El back **no sanitiza
+HTML** — el front debe renderizarlo de forma segura. Se hace trim; `""` (o solo
+espacios) se guarda como `null`. Máximo 5000 caracteres tras el trim, si lo excede
+responde `422`.
 
 Response `201`, un `LeadRead` completo:
 ```json
@@ -449,6 +454,7 @@ Response `201`, un `LeadRead` completo:
   "account_id": "uuid",
   "name": "María",
   "channel": "instagram",
+  "description": "**Interesada** en el plan anual",
   "stage": "nuevo",
   "stage_changed_at": "2026-07-30T10:00:00Z",
   "converted_at": null,
@@ -558,7 +564,7 @@ Response `200`:
 - `avg_conversion_days`: promedio en días de `(converted_at - created_at)` sobre el
   mismo conjunto de "convertidos" de arriba. `null` si ese conjunto está vacío.
 
-**Fuera de alcance todavía**: editar campos de un lead ya creado (nombre, canal),
+**Fuera de alcance todavía**: editar campos de un lead ya creado (nombre, canal, descripción),
 restaurar un soft-delete o des-archivar uno archivado, notas/comentarios, asignación a
 colaboradores, recordatorios.
 
