@@ -460,6 +460,7 @@ Response `201`, un `LeadRead` completo:
   "converted_at": null,
   "archived": false,
   "archive_reason": null,
+  "archive_note": null,
   "archived_at": null,
   "created_at": "2026-07-30T10:00:00Z"
 }
@@ -495,12 +496,18 @@ Archiva un lead individual (botón por card, fuera de la columna `convertida`).
 
 Request:
 ```json
-{ "reason": "not_converted" }
+{ "reason": "not_converted", "note": "Se fue con la competencia" }
 ```
 `reason`: uno de `"converted" | "not_converted"`.
 
-Efecto: `archived: true`, `archive_reason` = lo recibido, `archived_at` = ahora. El
-`stage` no cambia.
+`note` (opcional, default `null`): nota en markdown crudo, el back **no sanitiza HTML**
+(el front la renderiza de forma segura). Se hace trim; `""` o solo espacios se guarda
+como `null`. Máximo 5000 caracteres tras el trim, si lo excede responde `422`. Solo se
+guarda si `reason == "not_converted"`; con `reason: "converted"` se ignora (queda
+`null`, sin error).
+
+Efecto: `archived: true`, `archive_reason` = lo recibido, `archive_note` = la nota (según
+la regla de arriba), `archived_at` = ahora. El `stage` no cambia.
 
 Response `200`: `LeadRead` actualizado.
 Errores: `404` si no existe, ya está archivado o tiene soft delete. `422` si `reason` no
@@ -509,7 +516,7 @@ es un valor válido.
 #### `POST /accounts/{account_id}/leads/archive-converted`
 Botón "Archivar convertidos": archiva de una **todos** los leads activos que están en
 `stage: "convertida"`, con `archive_reason: "converted"` forzado del lado del servidor
-(no hace falta mandar nada en el body). Atómico — evita loopear `POST .../archive` una
+(no hace falta mandar nada en el body; `archive_note` queda `null`). Atómico — evita loopear `POST .../archive` una
 vez por card desde el frontend.
 
 Response `200`: `list[LeadRead]` — todos los leads que quedaron archivados por esta
@@ -704,6 +711,7 @@ frontend (splash screen, banner de "backend caído").
 - Canal de lead (`LeadRead.channel`): `"instagram"`, `"whatsapp"`, `"referido"`, `"web"`, `"otro"`
 - Etapa de lead (`LeadRead.stage`, filtro `stage` de `/leads`): `"nuevo"`, `"conversacion"`, `"propuesta"`, `"agendada"`, `"convertida"`
 - Motivo de archivado (`LeadRead.archive_reason`): `"converted"`, `"not_converted"`
+- Nota de archivado (`LeadRead.archive_note`): `string | null`, solo con `not_converted`, máx 5000 caracteres
 - Prioridad de tarea (`TaskRead.priority`): `"alta"`, `"media"`, `"baja"`
 - Origen de tarea sugerida (`TaskRead.suggestion_type`): `"posting_reminder"`, `"unanswered_conversation"`
 

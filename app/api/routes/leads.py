@@ -252,6 +252,8 @@ async def archive_lead(
 
     lead.archived = True
     lead.archive_reason = payload.reason
+    # The note only makes sense for a discard; silently dropped for "converted".
+    lead.archive_note = payload.note if payload.reason == ArchiveReason.NOT_CONVERTED else None
     lead.archived_at = datetime.now(UTC)
 
     await db.commit()

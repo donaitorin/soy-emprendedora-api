@@ -8,6 +8,18 @@ from app.models.lead import ArchiveReason, LeadChannel, LeadStage
 DESCRIPTION_MAX_LENGTH = 5000
 
 
+def _normalize_markdown(v: str | None, field: str) -> str | None:
+    """Trim; empty/whitespace -> None; enforce the max length after trimming."""
+    if v is None:
+        return None
+    v = v.strip()
+    if not v:
+        return None
+    if len(v) > DESCRIPTION_MAX_LENGTH:
+        raise ValueError(f"{field} must be at most {DESCRIPTION_MAX_LENGTH} characters")
+    return v
+
+
 class LeadCreate(BaseModel):
     name: str
     channel: LeadChannel
@@ -17,14 +29,7 @@ class LeadCreate(BaseModel):
     @field_validator("description")
     @classmethod
     def _normalize_description(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        v = v.strip()
-        if not v:
-            return None
-        if len(v) > DESCRIPTION_MAX_LENGTH:
-            raise ValueError(f"description must be at most {DESCRIPTION_MAX_LENGTH} characters")
-        return v
+        return _normalize_markdown(v, "description")
 
 
 class LeadRead(BaseModel):
@@ -40,6 +45,7 @@ class LeadRead(BaseModel):
     converted_at: datetime | None
     archived: bool
     archive_reason: ArchiveReason | None
+    archive_note: str | None
     archived_at: datetime | None
     created_at: datetime
 
@@ -50,6 +56,13 @@ class LeadStageUpdate(BaseModel):
 
 class LeadArchiveRequest(BaseModel):
     reason: ArchiveReason
+    # Raw markdown; only kept when reason == "not_converted" (see archive_lead).
+    note: str | None = None
+
+    @field_validator("note")
+    @classmethod
+    def _normalize_note(cls, v: str | None) -> str | None:
+        return _normalize_markdown(v, "note")
 
 
 class LeadPage(BaseModel):

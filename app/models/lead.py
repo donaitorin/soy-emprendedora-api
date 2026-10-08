@@ -67,6 +67,7 @@ class Lead(Base):
         Enum(ArchiveReason, name="archive_reason", values_callable=lambda obj: [e.value for e in obj]),
         nullable=True,
     )
+    archive_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     # Soft delete: a non-null deleted_at excludes this row from the board, the
