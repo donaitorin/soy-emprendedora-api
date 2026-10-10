@@ -498,6 +498,28 @@ Response `201`, un `LeadRead` completo:
 }
 ```
 
+#### `PATCH /accounts/{account_id}/leads/{lead_id}`
+Edita el nombre, el canal y/o la descripción de un lead ya creado (botón de lápiz de la
+card). Miembro del negocio o admin.
+
+Request, todos los campos opcionales (PATCH parcial: **solo se actualizan las claves
+presentes**):
+```json
+{ "name": "María López", "channel": "whatsapp", "description": "Prefiere llamadas" }
+```
+- `name`: se hace trim; no puede quedar vacío ni ser `null` (`422`).
+- `channel`: mismo enum que en el `POST`; no acepta `null`; `422` si es inválido.
+- `description`: misma regla que en el `POST` (trim, `""` o solo espacios pasa a `null`,
+  máx 5000 caracteres tras el trim, `422` si lo excede). Mandar `"description": null` la
+  borra; omitir la clave la deja como está.
+- Un body vacío `{}` da `422` (un PATCH que no hace nada).
+
+Funciona en leads activos **y archivados** (la tabla lista ambos). No cambia `stage`,
+`stage_changed_at`, `converted_at`, `archive_*`, `scheduled_at`, el PDF ni las métricas.
+
+Response `200`: `LeadRead` completo actualizado.
+Errores: `404` si el lead no existe o tiene soft delete; `422` por las reglas de arriba.
+
 #### `GET /accounts/{account_id}/leads/board`
 Sin paginar. Solo leads activos (`archived: false`, sin soft delete) — es la data cruda
 para las columnas del tablero; agrupar por `stage` del lado del cliente. Orden: más
@@ -660,7 +682,7 @@ Response `200`:
 - `avg_conversion_days`: promedio en días de `(converted_at - created_at)` sobre el
   mismo conjunto de "convertidos" de arriba. `null` si ese conjunto está vacío.
 
-**Fuera de alcance todavía**: editar campos de un lead ya creado (nombre, canal, descripción; la agenda sí se edita con `/schedule` y el PDF con `/pdf`),
+**Fuera de alcance todavía**: editar el motivo/nota de archivado de un lead ya archivado,
 restaurar un soft-delete o des-archivar uno archivado, notas/comentarios, asignación a
 colaboradores, recordatorios.
 

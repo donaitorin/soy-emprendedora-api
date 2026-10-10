@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.models.lead import ArchiveReason, LeadChannel, LeadStage
 
@@ -30,6 +30,38 @@ class LeadCreate(BaseModel):
     @classmethod
     def _normalize_description(cls, v: str | None) -> str | None:
         return _normalize_markdown(v, "description")
+
+
+class LeadUpdate(BaseModel):
+    """Partial update: only the keys present in the body are applied (model_fields_set)."""
+
+    name: str | None = None
+    channel: LeadChannel | None = None
+    description: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _normalize_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return None  # explicit null is rejected in _check_fields
+        v = v.strip()
+        if not v:
+            raise ValueError("name must not be empty")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def _normalize_description(cls, v: str | None) -> str | None:
+        return _normalize_markdown(v, "description")
+
+    @model_validator(mode="after")
+    def _check_fields(self) -> "LeadUpdate":
+        if not self.model_fields_set:
+            raise ValueError("at least one of name, channel, description is required")
+        for field in ("name", "channel"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
 
 
 class LeadRead(BaseModel):

@@ -22,6 +22,7 @@ from app.schemas.lead import (
     LeadScheduleUpdate,
     LeadStageUpdate,
     LeadStats,
+    LeadUpdate,
 )
 from app.services import storage
 
@@ -256,6 +257,26 @@ async def archive_converted_leads(
     for lead in leads:
         await db.refresh(lead)
     return leads
+
+
+@router.patch("/{account_id}/leads/{lead_id}", response_model=LeadRead)
+async def update_lead(
+    account_id: uuid.UUID,
+    lead_id: uuid.UUID,
+    payload: LeadUpdate,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> Lead:
+    """Edits name / channel / description (only the keys sent). Works on active and
+    archived leads; touches no stage, archive or stats field."""
+    lead = await _get_lead_or_404(db, account_id, lead_id)
+
+    for field in payload.model_fields_set:
+        setattr(lead, field, getattr(payload, field))
+
+    await db.commit()
+    await db.refresh(lead)
+    return lead
 
 
 @router.patch("/{account_id}/leads/{lead_id}/stage", response_model=LeadRead)

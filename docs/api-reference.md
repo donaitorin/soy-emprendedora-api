@@ -40,6 +40,7 @@ apropiados (401/403/404/409/502). Documentación interactiva viva: `/docs` (Swag
 | GET | `/accounts/{account_id}/leads/board` | miembro del negocio o admin | Data cruda del kanban, sin paginar — solo leads activos. |
 | GET | `/accounts/{account_id}/leads/stats` | miembro del negocio o admin | `active_count`, `conversion_rate`, `avg_conversion_days`. |
 | POST | `/accounts/{account_id}/leads/archive-converted` | miembro del negocio o admin | Archiva de una todos los activos en `stage: "convertida"` (`archive_reason: "converted"` forzado). |
+| PATCH | `/accounts/{account_id}/leads/{lead_id}` | miembro del negocio o admin | Edita `name`/`channel`/`description` (parcial, solo las claves enviadas; `{}` da 422). Activos y archivados. |
 | PATCH | `/accounts/{account_id}/leads/{lead_id}/stage` | miembro del negocio o admin | Mueve de etapa (drag and drop). Limpia `converted_at` si sale de `"convertida"`. |
 | PATCH | `/accounts/{account_id}/leads/{lead_id}/schedule` | miembro del negocio o admin | Fija o quita (`null`) `scheduled_at`. Solo leads activos. No cambia etapa ni métricas. |
 | POST | `/accounts/{account_id}/leads/{lead_id}/archive` | miembro del negocio o admin | Archiva un lead puntual con el `reason` recibido y un `note` opcional (solo se guarda con `not_converted`). |
