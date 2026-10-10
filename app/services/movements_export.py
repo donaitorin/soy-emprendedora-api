@@ -48,8 +48,8 @@ def build_movements_workbook(movements: list[MoneyMovement]) -> bytes:
     for cell in ws[1]:
         cell.font = Font(bold=True)
 
-    total_income = Decimal("0")
-    total_expense = Decimal("0")
+    total_income = Decimal(0)
+    total_expense = Decimal(0)
 
     for m in movements:
         is_income = m.type == MovementType.INCOME

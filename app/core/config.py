@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     meta_oauth_scopes: str = "pages_show_list,instagram_basic,instagram_manage_insights,business_management"
     meta_graph_api_version: str = "v21.0"
 
+    # Object storage (S3-compatible: Cloudflare R2 now, AWS S3 later). All optional so
+    # the app boots without them; PDF endpoints answer 503 until they're set. To move
+    # to S3, change these values and leave CLOUDFLARE_BUCKET_ENDPOINT empty.
+    cloudflare_access_key: str | None = None
+    cloudflare_secret_access: str | None = None
+    cloudflare_bucket_endpoint: str | None = None
+    cloudflare_bucket_name: str | None = None
+
     # CORS
     frontend_url: str = "http://localhost:3000"
 

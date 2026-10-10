@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -63,6 +63,12 @@ class Lead(Base):
     stage_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     converted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # One attached PDF per lead, in the private bucket. `pdf_key` is internal only —
+    # never serialized (see LeadRead); the other three describe it to the client.
+    pdf_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pdf_filename: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pdf_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pdf_uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archive_reason: Mapped[ArchiveReason | None] = mapped_column(
         Enum(ArchiveReason, name="archive_reason", values_callable=lambda obj: [e.value for e in obj]),

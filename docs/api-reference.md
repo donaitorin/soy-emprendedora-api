@@ -43,6 +43,9 @@ apropiados (401/403/404/409/502). Documentación interactiva viva: `/docs` (Swag
 | PATCH | `/accounts/{account_id}/leads/{lead_id}/stage` | miembro del negocio o admin | Mueve de etapa (drag and drop). Limpia `converted_at` si sale de `"convertida"`. |
 | PATCH | `/accounts/{account_id}/leads/{lead_id}/schedule` | miembro del negocio o admin | Fija o quita (`null`) `scheduled_at`. Solo leads activos. No cambia etapa ni métricas. |
 | POST | `/accounts/{account_id}/leads/{lead_id}/archive` | miembro del negocio o admin | Archiva un lead puntual con el `reason` recibido y un `note` opcional (solo se guarda con `not_converted`). |
+| POST | `/accounts/{account_id}/leads/{lead_id}/pdf` | miembro del negocio o admin | Sube (o reemplaza) el PDF del lead, `multipart` campo `file`. Máx 10 MB; 413/415/422 según el caso. Activos y archivados. |
+| GET | `/accounts/{account_id}/leads/{lead_id}/pdf` | miembro del negocio o admin | `{url, filename, expires_in}` con URL presignada (300 s) de descarga. 404 si no hay PDF. |
+| DELETE | `/accounts/{account_id}/leads/{lead_id}/pdf` | miembro del negocio o admin | Borra el PDF del bucket y limpia los campos `pdf_*`. 204; 404 si no hay. |
 | DELETE | `/accounts/{account_id}/leads/{lead_id}` | miembro del negocio o admin | Soft-delete. Funciona sobre leads activos o archivados. |
 
 ## Suggestions (`app/api/routes/suggestions.py`)

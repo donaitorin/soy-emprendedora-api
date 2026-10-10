@@ -1,8 +1,11 @@
+import io
+import logging
 import math
+import re
 import uuid
 from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,13 +17,21 @@ from app.schemas.lead import (
     LeadArchiveRequest,
     LeadCreate,
     LeadPage,
+    LeadPdfUrl,
     LeadRead,
     LeadScheduleUpdate,
     LeadStageUpdate,
     LeadStats,
 )
+from app.services import storage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/accounts", tags=["leads"])
+
+PDF_MAX_BYTES = 10 * 1024 * 1024
+PDF_DOWNLOAD_EXPIRES_IN = 300
+_READ_CHUNK = 1024 * 1024
 
 
 async def _get_account_or_404(db: AsyncSession, account_id: uuid.UUID) -> Account:
@@ -66,6 +77,39 @@ async def create_lead(
     await db.commit()
     await db.refresh(lead)
     return lead
+
+
+async def _get_lead_or_404(db: AsyncSession, account_id: uuid.UUID, lead_id: uuid.UUID) -> Lead:
+    """Active or archived, but never soft-deleted (used by the PDF endpoints)."""
+    result = await db.execute(
+        select(Lead).where(Lead.id == lead_id, Lead.account_id == account_id, Lead.deleted_at.is_(None))
+    )
+    lead = result.scalar_one_or_none()
+    if lead is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead not found")
+    return lead
+
+
+def _sanitize_filename(name: str | None) -> str:
+    """Keeps only the base name, drops control chars / quotes / separators, caps length."""
+    name = (name or "").replace("\\", "/").rsplit("/", 1)[-1]
+    name = re.sub(r'[\x00-\x1f\x7f"<>:|?*;]', "", name).strip(" .")
+    stem = name[:-4] if name.lower().endswith(".pdf") else name
+    stem = stem[:150].strip(" .") or "documento"
+    return f"{stem}.pdf"
+
+
+async def _delete_object_quietly(key: str | None) -> None:
+    if not key:
+        return
+    try:
+        await storage.delete(key)
+    except Exception:
+        logger.warning("Could not delete storage object %s", key, exc_info=True)
+
+
+def _storage_unavailable() -> HTTPException:
+    return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "File storage is not available")
 
 
 @router.get("/{account_id}/leads", response_model=LeadPage)
@@ -299,3 +343,94 @@ async def delete_lead(
 
     lead.deleted_at = datetime.now(UTC)
     await db.commit()
+
+
+@router.post("/{account_id}/leads/{lead_id}/pdf", response_model=LeadRead)
+async def upload_lead_pdf(
+    account_id: uuid.UUID,
+    lead_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> Lead:
+    """Attaches (or replaces) the lead's single PDF. Validated server-side: content
+    type + .pdf extension + `%PDF-` magic bytes + 10 MB cap."""
+    lead = await _get_lead_or_404(db, account_id, lead_id)
+
+    if (file.content_type or "").split(";")[0].strip().lower() != "application/pdf" or not (
+        file.filename or ""
+    ).lower().endswith(".pdf"):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Only PDF files are allowed")
+
+    # Read at most limit+1 bytes so an oversized upload is cut off, not buffered whole.
+    buf = bytearray()
+    while chunk := await file.read(_READ_CHUNK):
+        buf.extend(chunk)
+        if len(buf) > PDF_MAX_BYTES:
+            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "PDF exceeds the 10 MB limit")
+    if not buf:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The file is empty")
+    if not buf.startswith(b"%PDF-"):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Only PDF files are allowed")
+
+    key = f"leads/{account_id}/{lead_id}/{uuid.uuid4()}.pdf"
+    try:
+        await storage.upload_fileobj(key, io.BytesIO(buf), "application/pdf")
+    except storage.StorageNotConfiguredError:
+        raise _storage_unavailable()
+    except Exception:
+        logger.exception("PDF upload failed")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Could not store the file")
+
+    old_key = lead.pdf_key
+    lead.pdf_key = key
+    lead.pdf_filename = _sanitize_filename(file.filename)
+    lead.pdf_size = len(buf)
+    lead.pdf_uploaded_at = datetime.now(UTC)
+    try:
+        await db.commit()
+    except Exception:
+        await _delete_object_quietly(key)
+        raise
+    await db.refresh(lead)
+
+    if old_key:
+        await _delete_object_quietly(old_key)
+    return lead
+
+
+@router.get("/{account_id}/leads/{lead_id}/pdf", response_model=LeadPdfUrl)
+async def get_lead_pdf_url(
+    account_id: uuid.UUID,
+    lead_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> LeadPdfUrl:
+    lead = await _get_lead_or_404(db, account_id, lead_id)
+    if lead.pdf_key is None or lead.pdf_filename is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead has no PDF")
+    try:
+        url = storage.presigned_download_url(lead.pdf_key, lead.pdf_filename, PDF_DOWNLOAD_EXPIRES_IN)
+    except storage.StorageNotConfiguredError:
+        raise _storage_unavailable()
+    return LeadPdfUrl(url=url, filename=lead.pdf_filename, expires_in=PDF_DOWNLOAD_EXPIRES_IN)
+
+
+@router.delete("/{account_id}/leads/{lead_id}/pdf", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_lead_pdf(
+    account_id: uuid.UUID,
+    lead_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> None:
+    lead = await _get_lead_or_404(db, account_id, lead_id)
+    if lead.pdf_key is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead has no PDF")
+
+    old_key = lead.pdf_key
+    lead.pdf_key = None
+    lead.pdf_filename = None
+    lead.pdf_size = None
+    lead.pdf_uploaded_at = None
+    await db.commit()
+    await _delete_object_quietly(old_key)

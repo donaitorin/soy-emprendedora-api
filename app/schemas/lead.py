@@ -44,11 +44,20 @@ class LeadRead(BaseModel):
     stage_changed_at: datetime
     converted_at: datetime | None
     scheduled_at: datetime | None
+    pdf_filename: str | None
+    pdf_size: int | None
+    pdf_uploaded_at: datetime | None
     archived: bool
     archive_reason: ArchiveReason | None
     archive_note: str | None
     archived_at: datetime | None
     created_at: datetime
+
+
+class LeadPdfUrl(BaseModel):
+    url: str
+    filename: str
+    expires_in: int
 
 
 class LeadStageUpdate(BaseModel):

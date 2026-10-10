@@ -61,6 +61,9 @@ Ver `.env.example`. Resumen:
 | `META_REDIRECT_URI` | Debe coincidir exactamente con la configurada en Meta for Developers |
 | `META_OAUTH_SCOPES` | Scopes solicitados en el flujo OAuth |
 | `FRONTEND_URL` | Origen del frontend, usado para configurar CORS |
+| `CLOUDFLARE_ACCESS_KEY` / `CLOUDFLARE_SECRET_ACCESS` | Credenciales S3-compatibles del bucket privado donde se guardan los PDF de los leads |
+| `CLOUDFLARE_BUCKET_ENDPOINT` | Endpoint de la cuenta (sin el nombre del bucket). Vacío para usar AWS S3 |
+| `CLOUDFLARE_BUCKET_NAME` | Nombre del bucket |
 
 Generar `FERNET_KEY`:
 

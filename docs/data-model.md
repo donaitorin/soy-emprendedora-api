@@ -86,6 +86,10 @@ erDiagram
         timestamp stage_changed_at
         timestamp converted_at "NULL salvo stage=convertida"
         timestamp scheduled_at "agenda de reunión/llamada, NULL si no hay"
+        text pdf_key "clave del objeto en el bucket, interno, nunca expuesto"
+        text pdf_filename "nombre original saneado"
+        int pdf_size "bytes"
+        timestamp pdf_uploaded_at
         bool archived
         enum archive_reason "converted|not_converted, NULL si archived=false"
         text archive_note "markdown, solo con not_converted"
@@ -179,6 +183,9 @@ tarde, se completa de nuevo con la fecha de ese momento, no la original).
 `description`, `archive_note` (solo con `archive_reason=not_converted`) son markdown crudo
 sin sanitizar, máx 5000 caracteres. `scheduled_at` es la fecha/hora de una reunión o
 llamada; fijarla no mueve el lead de etapa ni toca `stage_changed_at`.
+`pdf_*` describen el único PDF adjunto, guardado en un bucket S3-compatible privado
+(clave `leads/<account_id>/<lead_id>/<uuid>.pdf`, `app/services/storage.py`); `pdf_key`
+nunca sale en la API y las descargas usan URLs presignadas de 5 minutos.
 
 ### `suggestions`
 Feedback libre que envía una usuaria desde el modal "Sugerencias" (`message` en markdown

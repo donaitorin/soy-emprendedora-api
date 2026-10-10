@@ -487,6 +487,9 @@ Response `201`, un `LeadRead` completo:
   "stage_changed_at": "2026-07-30T10:00:00Z",
   "converted_at": null,
   "scheduled_at": null,
+  "pdf_filename": null,
+  "pdf_size": null,
+  "pdf_uploaded_at": null,
   "archived": false,
   "archive_reason": null,
   "archive_note": null,
@@ -536,6 +539,46 @@ No cambia `stage` ni `stage_changed_at` ni las métricas: agendar no mueve el le
 Response `200`: `LeadRead` actualizado.
 Errores: `404` si el lead no existe, está archivado o tiene soft delete (mismo criterio
 que `/stage`). `422` si `scheduled_at` no es un datetime válido.
+
+#### PDF adjunto (uno por lead)
+Cada lead puede tener **un** PDF, que se sube después de crearlo y se guarda en un bucket
+privado (Cloudflare R2, API S3-compatible). `LeadRead` trae siempre `pdf_filename`
+(nombre original, ya saneado), `pdf_size` (bytes) y `pdf_uploaded_at`, los tres `null`
+si no hay PDF. La clave interna del objeto (`pdf_key`) **nunca** se expone.
+
+##### `POST /accounts/{account_id}/leads/{lead_id}/pdf`
+`multipart/form-data` con un único campo `file`. Hacerlo con `fetch` + header
+`Authorization` y un `FormData` (sin fijar `Content-Type` a mano, el browser agrega el
+boundary). Miembro del negocio o admin. Funciona en leads activos **y archivados**.
+
+Validaciones del servidor (el front igual debería validar antes): `Content-Type`
+`application/pdf` **y** extensión `.pdf` **y** primeros bytes `%PDF-`; tamaño máximo
+**10 MB**. Si el lead ya tenía un PDF, lo **reemplaza** (el objeto viejo se borra; si ese
+borrado falla, la respuesta igual es exitosa).
+
+Response `200`: `LeadRead` actualizado.
+Errores: `404` lead inexistente o borrado (soft delete); `413` más de 10 MB; `415` no es un
+PDF (tipo, extensión o contenido); `422` falta el campo `file` o el archivo está vacío;
+`502` falló el guardado en el bucket; `503` el almacenamiento no está configurado.
+
+##### `GET /accounts/{account_id}/leads/{lead_id}/pdf`
+Devuelve una URL de descarga temporal (JSON, no el archivo).
+```json
+{ "url": "https://...presigned...", "filename": "propuesta.pdf", "expires_in": 300 }
+```
+La URL vence en 300 s (5 min) y fuerza descarga (`Content-Disposition: attachment` con el
+nombre original). Pedirla justo al hacer clic y navegar a ella (`window.location.href =
+data.url`); no guardarla. No requiere CORS del bucket ni Bearer. Errores: `404` si el lead
+no existe/está borrado o no tiene PDF; `503` almacenamiento no configurado.
+
+##### `DELETE /accounts/{account_id}/leads/{lead_id}/pdf`
+Borra el objeto y limpia los campos `pdf_*`. `204` sin contenido; `404` si el lead no
+existe/está borrado o no tiene PDF.
+
+**Variables de entorno (backend):** `CLOUDFLARE_ACCESS_KEY`, `CLOUDFLARE_SECRET_ACCESS`,
+`CLOUDFLARE_BUCKET_ENDPOINT` (endpoint de la cuenta, sin el nombre del bucket) y
+`CLOUDFLARE_BUCKET_NAME`. Para migrar a AWS S3 solo se cambian estos valores y se deja
+vacío el endpoint.
 
 #### `POST /accounts/{account_id}/leads/{lead_id}/archive`
 Archiva un lead individual (botón por card, fuera de la columna `convertida`).
@@ -617,7 +660,7 @@ Response `200`:
 - `avg_conversion_days`: promedio en días de `(converted_at - created_at)` sobre el
   mismo conjunto de "convertidos" de arriba. `null` si ese conjunto está vacío.
 
-**Fuera de alcance todavía**: editar campos de un lead ya creado (nombre, canal, descripción; la agenda sí se edita con `/schedule`),
+**Fuera de alcance todavía**: editar campos de un lead ya creado (nombre, canal, descripción; la agenda sí se edita con `/schedule` y el PDF con `/pdf`),
 restaurar un soft-delete o des-archivar uno archivado, notas/comentarios, asignación a
 colaboradores, recordatorios.
 
