@@ -62,6 +62,7 @@ class Lead(Base):
     )
     stage_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     converted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archive_reason: Mapped[ArchiveReason | None] = mapped_column(
         Enum(ArchiveReason, name="archive_reason", values_callable=lambda obj: [e.value for e in obj]),

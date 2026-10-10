@@ -28,6 +28,7 @@ apropiados (401/403/404/409/502). Documentación interactiva viva: `/docs` (Swag
 | POST | `/accounts/{account_id}/expenses` | miembro del negocio o admin | Registra un gasto (`amount`, `occurred_on`, `category`). |
 | GET | `/accounts/{account_id}/expenses?from=&to=` | miembro del negocio o admin | Lista gastos, más reciente primero por `occurred_on`, filtro opcional por rango de fechas. |
 | GET | `/accounts/{account_id}/movements?page=&page_size=&from=&to=&type=` | miembro del negocio o admin | Vista combinada de ingresos y gastos, paginada (`page`/`page_size`), con `type` expuesto. |
+| GET | `/accounts/{account_id}/movements/export?from=&to=` | miembro del negocio o admin | Descarga `.xlsx` de ingresos + gastos del rango (`from`/`to` obligatorios, inclusivos). 422 si falta alguno o `from > to`. Ver [frontend-integration.md](frontend-integration.md). |
 | DELETE | `/accounts/{account_id}/movements/{movement_id}` | miembro del negocio o admin | Soft-delete de un ingreso o gasto (`deleted_at`). 404 si no existe o ya estaba borrado. |
 
 ## Leads (`app/api/routes/leads.py`)
@@ -40,8 +41,15 @@ apropiados (401/403/404/409/502). Documentación interactiva viva: `/docs` (Swag
 | GET | `/accounts/{account_id}/leads/stats` | miembro del negocio o admin | `active_count`, `conversion_rate`, `avg_conversion_days`. |
 | POST | `/accounts/{account_id}/leads/archive-converted` | miembro del negocio o admin | Archiva de una todos los activos en `stage: "convertida"` (`archive_reason: "converted"` forzado). |
 | PATCH | `/accounts/{account_id}/leads/{lead_id}/stage` | miembro del negocio o admin | Mueve de etapa (drag and drop). Limpia `converted_at` si sale de `"convertida"`. |
-| POST | `/accounts/{account_id}/leads/{lead_id}/archive` | miembro del negocio o admin | Archiva un lead puntual con el `reason` recibido. |
+| PATCH | `/accounts/{account_id}/leads/{lead_id}/schedule` | miembro del negocio o admin | Fija o quita (`null`) `scheduled_at`. Solo leads activos. No cambia etapa ni métricas. |
+| POST | `/accounts/{account_id}/leads/{lead_id}/archive` | miembro del negocio o admin | Archiva un lead puntual con el `reason` recibido y un `note` opcional (solo se guarda con `not_converted`). |
 | DELETE | `/accounts/{account_id}/leads/{lead_id}` | miembro del negocio o admin | Soft-delete. Funciona sobre leads activos o archivados. |
+
+## Suggestions (`app/api/routes/suggestions.py`)
+
+| Método | Path | Auth | Descripción |
+|---|---|---|---|
+| POST | `/accounts/{account_id}/suggestions` | miembro del negocio o admin | Envía una sugerencia (`message` markdown, trim, 1–5000 chars). `user_id` sale del token. |
 
 ## Tasks (`app/api/routes/tasks.py`)
 
@@ -70,6 +78,7 @@ Detalle completo del flujo en [meta-integration.md](meta-integration.md).
 | GET | `/admin/users?role=&is_active=` | Lista usuarios con filtros básicos. |
 | PATCH | `/admin/users/{user_id}` | Edita cualquier user (incl. `role` de plataforma). |
 | GET | `/admin/accounts` | Lista todos los negocios. |
+| GET | `/admin/suggestions?page=&page_size=` | Sugerencias de todos los negocios, paginadas, más reciente primero, con negocio y datos de quien la envió. |
 | PATCH | `/admin/accounts/{account_id}` | Edita cualquier negocio. |
 | GET | `/admin/accounts/{account_id}/entitlement` | Historial completo de entitlements del negocio. |
 | POST | `/admin/accounts/{account_id}/entitlement` | Crea/asigna un nuevo entitlement (nuevo plan, reactivación). |

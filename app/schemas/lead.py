@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -43,6 +43,7 @@ class LeadRead(BaseModel):
     stage: LeadStage
     stage_changed_at: datetime
     converted_at: datetime | None
+    scheduled_at: datetime | None
     archived: bool
     archive_reason: ArchiveReason | None
     archive_note: str | None
@@ -52,6 +53,19 @@ class LeadRead(BaseModel):
 
 class LeadStageUpdate(BaseModel):
     stage: LeadStage
+
+
+class LeadScheduleUpdate(BaseModel):
+    # Required but nullable: null clears the schedule. Any date is accepted.
+    scheduled_at: datetime | None
+
+    @field_validator("scheduled_at")
+    @classmethod
+    def _assume_utc(cls, v: datetime | None) -> datetime | None:
+        # A datetime without a zone is taken as UTC.
+        if v is not None and v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v
 
 
 class LeadArchiveRequest(BaseModel):

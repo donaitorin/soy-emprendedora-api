@@ -1,16 +1,19 @@
+import math
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_platform_admin
 from app.db.session import get_db
 from app.models.account import Account
 from app.models.entitlement import Entitlement
+from app.models.suggestion import Suggestion
 from app.models.user import PlatformRole, User
 from app.schemas.account import AccountRead, AccountUpdate
 from app.schemas.entitlement import EntitlementCreate, EntitlementRead, EntitlementUpdate
+from app.schemas.suggestion import SuggestionAdminRead, SuggestionPage
 from app.schemas.user import UserRead, UserUpdateAdmin
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_platform_admin)])
@@ -104,3 +107,45 @@ async def update_entitlement(
     await db.commit()
     await db.refresh(entitlement)
     return entitlement
+
+
+@router.get("/suggestions", response_model=SuggestionPage)
+async def list_suggestions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> SuggestionPage:
+    """Paginated suggestions from all businesses, newest first, with who sent them."""
+    total = (await db.execute(select(func.count()).select_from(Suggestion))).scalar_one()
+
+    stmt = (
+        select(Suggestion, Account.name, User)
+        .join(Account, Account.id == Suggestion.account_id)
+        .join(User, User.id == Suggestion.user_id)
+        .order_by(Suggestion.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = (await db.execute(stmt)).all()
+
+    items = [
+        SuggestionAdminRead(
+            id=s.id,
+            account_id=s.account_id,
+            user_id=s.user_id,
+            message=s.message,
+            created_at=s.created_at,
+            account_name=account_name,
+            user_email=u.email,
+            user_first_name=u.first_name,
+            user_last_name=u.last_name,
+        )
+        for s, account_name, u in rows
+    ]
+    return SuggestionPage(
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=math.ceil(total / page_size) if total > 0 else 0,
+    )

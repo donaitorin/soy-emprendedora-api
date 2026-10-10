@@ -17,6 +17,7 @@ dependencies = [
     "httpx>=0.28",
     "cryptography>=44.0",
     "python-multipart>=0.0.20",
+    "openpyxl>=3.1.5",
 ]
 
 [dependency-groups]

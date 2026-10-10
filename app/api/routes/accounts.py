@@ -2,7 +2,7 @@ import math
 import uuid
 from datetime import UTC, date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from app.schemas.money_movement import (
     MovementRead,
 )
 from app.schemas.user_account import MemberCreate, MemberRead
+from app.services.movements_export import build_movements_workbook
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -299,6 +300,41 @@ async def list_movements(
         page_size=page_size,
         total=total,
         total_pages=math.ceil(total / page_size) if total > 0 else 0,
+    )
+
+
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+# Declared before the /movements/{movement_id} route so "export" is never parsed as an id.
+@router.get("/{account_id}/movements/export")
+async def export_movements(
+    account_id: uuid.UUID,
+    from_: date = Query(..., alias="from"),
+    to: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> Response:
+    """Excel export of incomes + expenses in [from, to] (inclusive, by occurred_on),
+    oldest first, soft-deleted excluded. An empty range still returns a valid file."""
+    if from_ > to:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "`from` must be on or before `to`")
+
+    result = await db.execute(
+        select(MoneyMovement)
+        .where(
+            MoneyMovement.account_id == account_id,
+            MoneyMovement.deleted_at.is_(None),
+            MoneyMovement.occurred_on >= from_,
+            MoneyMovement.occurred_on <= to,
+        )
+        .order_by(MoneyMovement.occurred_on.asc(), MoneyMovement.created_at.asc())
+    )
+    content = build_movements_workbook(list(result.scalars().all()))
+    return Response(
+        content=content,
+        media_type=XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="movimientos_{from_}_{to}.xlsx"'},
     )
 
 

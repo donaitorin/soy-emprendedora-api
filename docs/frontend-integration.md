@@ -404,6 +404,34 @@ por `occurred_on`, `created_at` como desempate. `total_pages` es `0` si `total` 
 Esta es la primera ruta paginada de la API (antes no había ninguna — ver
 "Limitaciones conocidas" más abajo, que ya no aplica a este endpoint puntual).
 
+#### `GET /accounts/{account_id}/movements/export?from=YYYY-MM-DD&to=YYYY-MM-DD`
+Exporta ingresos y gastos a un archivo Excel (botón "Exportar" de la tabla de Dinero).
+Requiere Bearer y ser miembro del negocio o admin.
+
+Query params, **ambos obligatorios**: `from` y `to` (fecha `YYYY-MM-DD`, inclusivos, filtran
+por `occurred_on` igual que `/movements`). Excluye los movimientos borrados.
+
+Response `200`: **no es JSON**, es un archivo `.xlsx`
+(`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`) con
+`Content-Disposition: attachment; filename="movimientos_<from>_<to>.xlsx"`. Hay que
+pedirlo con `fetch` + el header `Authorization` y leer la respuesta como blob (una
+navegación directa no puede mandar el Bearer).
+
+Contenido: una hoja "Movimientos" con encabezado en negrita y las columnas **Fecha**
+(fecha real de Excel), **Tipo** (`Ingreso`/`Gasto`), **Monto** (número real con formato
+de moneda; fuente verde en ingresos y roja en gastos), **Fuente / Categoría** (la fuente
+en ingresos, la categoría en gastos) y **Método de pago** (vacío en gastos). Orden
+cronológico ascendente por `occurred_on`, `created_at` como desempate. Al final, una fila
+en blanco y tres filas de totales: *Total ingresos* (verde), *Total gastos* (rojo) y
+*Resultado* (ingresos menos gastos). Si no hay movimientos en el rango, igual devuelve el
+archivo con solo el encabezado y los totales en 0 (no es un 404).
+
+Errores (siguen siendo JSON `{"detail": ...}`): `422` si falta `from` o `to`, si alguno no
+es una fecha válida o si `from` es posterior a `to`; `403` si no es miembro del negocio.
+
+**CORS:** `Content-Disposition` está en `expose_headers`, así que el browser puede leer el
+nombre de archivo desde otro origen. Aun así conviene tener un nombre de respaldo.
+
 #### `DELETE /accounts/{account_id}/movements/{movement_id}`
 Borra (soft-delete) un ingreso o gasto ya cargado. Un movimiento borrado deja de
 aparecer en este endpoint, en `/incomes` y en `/expenses` — no se puede deshacer todavía.
@@ -412,7 +440,7 @@ Response `204` sin contenido. Errores: `404` si `movement_id` no existe en ese n
 o si ya estaba borrado.
 
 **Fuera de alcance todavía**: edición de movimientos existentes, restaurar un borrado,
-exportar (CSV, etc.), endpoints de agregados (total del día/mes, breakdown por fuente o
+exportar a otros formatos (CSV, etc.; Excel ya existe con `/movements/export`), endpoints de agregados (total del día/mes, breakdown por fuente o
 categoría, histórico), y la "meta del mes" (objetivo mensual configurable) — todo eso
 queda para un pedido posterior sobre este mismo modelo.
 
@@ -458,6 +486,7 @@ Response `201`, un `LeadRead` completo:
   "stage": "nuevo",
   "stage_changed_at": "2026-07-30T10:00:00Z",
   "converted_at": null,
+  "scheduled_at": null,
   "archived": false,
   "archive_reason": null,
   "archive_note": null,
@@ -490,6 +519,23 @@ Efecto: actualiza `stage_changed_at` a ahora. Si `stage` pasa a `"convertida"` y
 Response `200`: `LeadRead` actualizado.
 Errores: `404` si el lead no existe, está archivado, o tiene soft delete — no se puede
 mover algo que no está en el tablero.
+
+#### `PATCH /accounts/{account_id}/leads/{lead_id}/schedule`
+Fija o quita la fecha/hora de agenda (reunión o llamada) de un lead.
+
+Request:
+```json
+{ "scheduled_at": "2026-10-15T17:30:00Z" }
+```
+`scheduled_at`: datetime ISO 8601, o `null` para quitar la agenda. El campo es obligatorio
+en el body (si falta, `422`). Acepta cualquier fecha, pasada o futura, sin validar rango.
+Un datetime sin zona horaria se toma como UTC. Se devuelve siempre en UTC en `LeadRead`.
+
+No cambia `stage` ni `stage_changed_at` ni las métricas: agendar no mueve el lead de etapa.
+
+Response `200`: `LeadRead` actualizado.
+Errores: `404` si el lead no existe, está archivado o tiene soft delete (mismo criterio
+que `/stage`). `422` si `scheduled_at` no es un datetime válido.
 
 #### `POST /accounts/{account_id}/leads/{lead_id}/archive`
 Archiva un lead individual (botón por card, fuera de la columna `convertida`).
@@ -571,7 +617,7 @@ Response `200`:
 - `avg_conversion_days`: promedio en días de `(converted_at - created_at)` sobre el
   mismo conjunto de "convertidos" de arriba. `null` si ese conjunto está vacío.
 
-**Fuera de alcance todavía**: editar campos de un lead ya creado (nombre, canal, descripción),
+**Fuera de alcance todavía**: editar campos de un lead ya creado (nombre, canal, descripción; la agenda sí se edita con `/schedule`),
 restaurar un soft-delete o des-archivar uno archivado, notas/comentarios, asignación a
 colaboradores, recordatorios.
 
@@ -647,6 +693,39 @@ borrarla, categorías (Dinero/Audiencia/Leads/Operaciones), deshacer/restaurar,
 recordatorios, asignación a colaboradores, tareas con fecha futura (todas nacen "para
 hoy").
 
+### Sugerencias (feedback de usuarias)
+
+Botón "Sugerencias" del sidebar: un modal con un mensaje en markdown. Por ahora el front
+solo crea sugerencias; la lectura es para admins de plataforma (ver `GET /admin/suggestions`).
+
+#### `POST /accounts/{account_id}/suggestions`
+Requiere Bearer y ser miembro del negocio (owner o collaborator) o admin.
+
+Request:
+```json
+{ "message": "Me gustaría poder **exportar** mis leads" }
+```
+`message`: markdown crudo, el back **no sanitiza HTML** (el front lo renderiza de forma
+segura cuando exista una vista). Obligatorio: se hace trim y vacío o solo espacios da
+`422`. Máximo 5000 caracteres tras el trim, si lo excede responde `422`.
+
+Response `201`:
+```json
+{
+  "id": "uuid",
+  "account_id": "uuid",
+  "user_id": "uuid",
+  "message": "Me gustaría poder **exportar** mis leads",
+  "created_at": "2026-10-10T10:00:00Z"
+}
+```
+`user_id` es quien la envió (sale del token, no se manda en el body).
+Errores: `403` si no es miembro del negocio, `404` si el negocio no existe, `422` por
+`message` inválido.
+
+**Fuera de alcance todavía**: listar, editar o borrar sugerencias desde el front de una
+usuaria, estados (leída/resuelta), adjuntos.
+
 ### Admin (solo `role: "admin"` de plataforma — ocultar toda esta sección si `role !== "admin"`)
 
 #### `GET /admin/users?role=&is_active=`
@@ -685,6 +764,30 @@ Request:
 ```
 Solo `plan` es obligatorio; el resto tiene defaults (`status: active`, `source: manual`).
 Response `201`: un `EntitlementRead`.
+
+#### `GET /admin/suggestions?page=&page_size=`
+Sugerencias de todos los negocios, más reciente primero. Paginado igual que `/leads`
+(`page` default `1`, `page_size` default `20`, máximo `100`).
+
+Response `200`:
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "account_id": "uuid",
+      "user_id": "uuid",
+      "message": "...",
+      "created_at": "2026-10-10T10:00:00Z",
+      "account_name": "Mi negocio",
+      "user_email": "maria@ejemplo.com",
+      "user_first_name": "María",
+      "user_last_name": "Pérez"
+    }
+  ],
+  "page": 1, "page_size": 20, "total": 1, "total_pages": 1
+}
+```
 
 #### `PATCH /admin/entitlements/{entitlement_id}`
 Request (todos opcionales):
@@ -731,8 +834,8 @@ frontend (splash screen, banner de "backend caído").
   termine en una URL del frontend después del OAuth, hay que coordinarlo con el equipo de
   backend (cambiar `META_REDIRECT_URI` a una ruta del frontend que llame a este endpoint
   vía fetch, en vez de que Meta pegue directo al backend).
-- **Paginación solo en `/movements` y `/leads`**: son las únicas rutas paginadas de la
-  API (misma convención `page`/`page_size` en ambas). `GET /admin/users`,
+- **Paginación solo en `/movements`, `/leads` y `/admin/suggestions`**: son las únicas rutas
+  paginadas de la API (misma convención `page`/`page_size` en todas). `GET /admin/users`,
   `GET /admin/accounts`, `/incomes`, `/expenses`, `/leads/board`, listas de miembros,
   etc. siguen devolviendo todo sin paginar — con pocos datos hoy no importa, pero no
   asumir que seguirá así indefinidamente.

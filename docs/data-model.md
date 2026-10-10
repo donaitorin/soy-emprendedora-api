@@ -12,6 +12,8 @@ erDiagram
     ACCOUNTS ||--o{ MONEY_MOVEMENTS : "tiene"
     ACCOUNTS ||--o{ LEADS : "tiene"
     ACCOUNTS ||--o{ TASKS : "tiene"
+    ACCOUNTS ||--o{ SUGGESTIONS : "tiene"
+    USERS ||--o{ SUGGESTIONS : "envía"
 
     USERS {
         uuid id PK
@@ -79,11 +81,14 @@ erDiagram
         uuid account_id FK
         string name
         enum channel "instagram|whatsapp|referido|web|otro"
+        text description "markdown, NULL si no hay"
         enum stage "nuevo|conversacion|propuesta|agendada|convertida"
         timestamp stage_changed_at
         timestamp converted_at "NULL salvo stage=convertida"
+        timestamp scheduled_at "agenda de reunión/llamada, NULL si no hay"
         bool archived
         enum archive_reason "converted|not_converted, NULL si archived=false"
+        text archive_note "markdown, solo con not_converted"
         timestamp archived_at
         timestamp created_at
         timestamp deleted_at "soft delete, NULL = activo"
@@ -97,6 +102,13 @@ erDiagram
         bool done
         enum suggestion_type "posting_reminder|unanswered_conversation, NULL si manual"
         string conversation_ref "solo si suggestion_type=unanswered_conversation"
+        timestamp created_at
+    }
+    SUGGESTIONS {
+        uuid id PK
+        uuid account_id FK
+        uuid user_id FK "quien la envió"
+        text message "markdown"
         timestamp created_at
     }
 ```
@@ -163,6 +175,15 @@ drop, `app/api/routes/leads.py::update_lead_stage`); `converted_at` se completa 
 primera vez que `stage` pasa a `convertida` y **se limpia** si el lead se mueve a
 cualquier otra etapa (decisión de producto explícita — si vuelve a `convertida` más
 tarde, se completa de nuevo con la fecha de ese momento, no la original).
+
+`description`, `archive_note` (solo con `archive_reason=not_converted`) son markdown crudo
+sin sanitizar, máx 5000 caracteres. `scheduled_at` es la fecha/hora de una reunión o
+llamada; fijarla no mueve el lead de etapa ni toca `stage_changed_at`.
+
+### `suggestions`
+Feedback libre que envía una usuaria desde el modal "Sugerencias" (`message` en markdown
+crudo). Ligada al negocio y a quien la envió; sin soft delete. Solo los admins de
+plataforma la leen (`GET /admin/suggestions`).
 
 ### `tasks`
 Tareas de un `account`, siempre "para hoy" (sin fecha de vencimiento ni recurrencia).

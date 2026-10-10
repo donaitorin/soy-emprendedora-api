@@ -15,6 +15,7 @@ from app.schemas.lead import (
     LeadCreate,
     LeadPage,
     LeadRead,
+    LeadScheduleUpdate,
     LeadStageUpdate,
     LeadStats,
 )
@@ -234,6 +235,25 @@ async def update_lead_stage(
         # otherwise re-entering the column later wouldn't refresh converted_at
         # (the rule above only sets it when it's still null).
         lead.converted_at = None
+
+    await db.commit()
+    await db.refresh(lead)
+    return lead
+
+
+@router.patch("/{account_id}/leads/{lead_id}/schedule", response_model=LeadRead)
+async def update_lead_schedule(
+    account_id: uuid.UUID,
+    lead_id: uuid.UUID,
+    payload: LeadScheduleUpdate,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_business_access),
+) -> Lead:
+    """Sets or clears (null) the meeting/call date. Doesn't touch stage,
+    stage_changed_at, or any stat."""
+    lead = await _get_active_lead_or_404(db, account_id, lead_id)
+
+    lead.scheduled_at = payload.scheduled_at
 
     await db.commit()
     await db.refresh(lead)
